@@ -1,0 +1,5 @@
+pytest
+allure-pytest
+playwright
+pytest-playwright
+PyMySQL

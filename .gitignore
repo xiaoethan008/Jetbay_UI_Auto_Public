@@ -1,0 +1,17 @@
+venv/
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+.pytest_cache/
+.playwright/
+
+allure-results/
+allure-report/
+screenshots/
+artifacts/
+
+.coverage
+htmlcov/

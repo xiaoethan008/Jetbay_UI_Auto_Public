@@ -1,0 +1,16 @@
+# Example pip.ini / pip.conf file to allow network access behind a proxy or
+# to disable certificate verification if necessary.
+
+[global]
+# trust the primary PyPI hosts
+trusted-host =
+    pypi.org
+    files.pythonhosted.org
+
+# if your environment uses a proxy, uncomment and set the values below:
+# proxy = http://user:password@proxy.example.com:8080
+
+# You can also provide a custom certificate, or disable certification checks
+#cert = path\to\your\custom\cert.pem
+# To disable certificate checks (not recommended):
+# cert =
