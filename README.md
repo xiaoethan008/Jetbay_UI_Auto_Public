@@ -31,7 +31,7 @@ pytest -v
 This repository includes GitHub Actions workflows for UI automation:
 
 - `UI Smoke`: runs on `push`, `pull_request`, and manual trigger. It executes `tests/test_login.py`.
-- `UI Regression`: runs the full pytest suite on manual trigger and every day at `02:00` China time (`18:00 UTC`), then generates an Allure HTML report.
+- `UI Regression`: runs the full pytest suite on manual trigger and every day at `09:00` China time (`01:00 UTC`), then generates an Allure HTML report.
 
 Recommended GitHub repository secrets:
 
