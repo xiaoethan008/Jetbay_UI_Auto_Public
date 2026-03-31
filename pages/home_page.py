@@ -1,4 +1,5 @@
 from urllib.parse import urljoin
+import re
 
 from config.search_routes import SEARCHABLE_CITY_PAIRS, SEARCHABLE_MULTI_CITY_ROUTES
 from runtime_environments import get_current_environment
@@ -61,6 +62,72 @@ class HomePage(BasePage):
         link.click(force=True)
         return True
 
+    def _hover_top_menu_if_visible(self, top_menu_text: str):
+        header = self.page.locator("header").first
+        top_menu = header.get_by_text(top_menu_text, exact=True).first
+        if top_menu.count() == 0:
+            return
+
+        try:
+            top_menu.wait_for(state="visible", timeout=3000)
+            top_menu.hover()
+            self.page.wait_for_timeout(600)
+        except PlaywrightTimeoutError:
+            return
+
+    def _find_visible_link_href(
+        self,
+        scope_selector: str,
+        href_keyword: str,
+        menu_text: str,
+    ) -> str | None:
+        scope = self.page.locator(scope_selector).first
+        links = scope.locator(f"a[href*='{href_keyword}']:visible")
+        link_count = links.count()
+
+        if link_count == 0:
+            return None
+
+        matched_href = None
+        for index in range(link_count):
+            link = links.nth(index)
+            try:
+                text = link.inner_text().strip()
+            except Exception:
+                continue
+            href = link.get_attribute("href")
+            if not href:
+                continue
+            if href.startswith("http") and "jet-bay.com" not in href:
+                continue
+            if text == menu_text:
+                return href
+            if matched_href is None:
+                matched_href = href
+
+        return matched_href
+
+    def _resolve_menu_item_href(
+        self,
+        top_menu_text: str,
+        menu_text: str,
+        href_keyword: str,
+    ) -> str:
+        self._hover_top_menu_if_visible(top_menu_text)
+
+        for scope_selector in ("header", "nav", "aside", "main", "body"):
+            href = self._find_visible_link_href(
+                scope_selector=scope_selector,
+                href_keyword=href_keyword,
+                menu_text=menu_text,
+            )
+            if href:
+                return href
+
+        if href_keyword.startswith("/"):
+            return href_keyword
+        return f"/{href_keyword.lstrip('/')}"
+
     def _safe_text(self, value):
         return str(value).encode("gbk", errors="replace").decode("gbk")
 
@@ -72,6 +139,26 @@ class HomePage(BasePage):
     def _get_airport_input(self, index: int):
         return self.page.locator(HomePageLocators.COMBOBOX_INPUTS).nth(index)
 
+    def _find_matching_airport_option(self, city: str):
+        options = self.page.locator(HomePageLocators.AIRPORT_OPTIONS)
+        fallback_option = None
+
+        for _ in range(12):
+            visible_count = options.count()
+            if visible_count > 0:
+                fallback_option = options.first
+                for index in range(visible_count):
+                    option = options.nth(index)
+                    try:
+                        option_text = option.inner_text()
+                    except Exception:
+                        continue
+                    if city.lower() in option_text.lower():
+                        return option
+            self.page.wait_for_timeout(250)
+
+        return fallback_option
+
     def _select_airport(self, input_index: int, city: str):
         self.page.wait_for_load_state("domcontentloaded")
 
@@ -82,11 +169,25 @@ class HomePage(BasePage):
         field.press("Backspace")
         field.fill(city)
 
-        options = self.page.locator(HomePageLocators.AIRPORT_OPTIONS)
-        options.first.wait_for(state="visible", timeout=5000)
-        field.press("ArrowDown")
-        field.press("Enter")
+        option = self._find_matching_airport_option(city)
+        if option is None:
+            raise AssertionError(f"Unable to find airport option matching: {city}")
+
+        option.scroll_into_view_if_needed()
+        option.click(force=True)
         self.page.wait_for_timeout(800)
+
+    def type_airport_without_selecting(self, input_index: int, value: str):
+        print(f"\n[search] raw airport[{input_index}]: {self._safe_text(value[:60])}")
+        self.page.wait_for_load_state("domcontentloaded")
+
+        field = self._get_airport_input(input_index)
+        field.wait_for(state="visible", timeout=10000)
+        field.click()
+        field.press("Control+A")
+        field.press("Backspace")
+        field.fill(value)
+        self.page.wait_for_timeout(1200)
 
     def _try_select_airport(self, input_index: int, city: str, option_timeout: int = 2500) -> bool:
         """尝试选择机场，搜不到候选项时返回 False。"""
@@ -99,19 +200,19 @@ class HomePage(BasePage):
         field.press("Backspace")
         field.fill(city)
 
-        options = self.page.locator(HomePageLocators.AIRPORT_OPTIONS)
         try:
-            options.first.wait_for(state="visible", timeout=option_timeout)
-        except PlaywrightTimeoutError:
+            option = self._find_matching_airport_option(city)
+            if option is None:
+                raise PlaywrightTimeoutError(f"No airport option matched {city}")
+            option.scroll_into_view_if_needed()
+            option.click(force=True)
+            self.page.wait_for_timeout(800)
+            return True
+        except (PlaywrightTimeoutError, AssertionError):
             field.press("Control+A")
             field.press("Backspace")
             self.page.wait_for_timeout(300)
             return False
-
-        field.press("ArrowDown")
-        field.press("Enter")
-        self.page.wait_for_timeout(800)
-        return True
 
     def enter_origin(self, origin: str):
         print(f"\n[search] origin: {origin}")
@@ -180,9 +281,34 @@ class HomePage(BasePage):
 
     def click_search(self):
         print("\n[search] submit")
-        button = self.page.locator(HomePageLocators.SEARCH_BUTTON)
+        button = self.page.locator(HomePageLocators.SEARCH_BUTTON).first
+        if button.count() == 0:
+            for text in HomePageLocators.SEARCH_BUTTON_TEXT_OPTIONS:
+                candidate = self.page.get_by_role("button", name=text).first
+                if candidate.count() > 0:
+                    button = candidate
+                    break
+        if button.count() == 0:
+            for text in HomePageLocators.SEARCH_BUTTON_TEXT_OPTIONS:
+                candidate = self.page.locator(f"button:has-text('{text}'):visible").first
+                if candidate.count() > 0:
+                    button = candidate
+                    break
         button.wait_for(state="visible", timeout=10000)
         button.click()
+        self.page.wait_for_timeout(1000)
+
+    def has_same_city_validation_error(self) -> bool:
+        error = self.page.get_by_text(HomePageLocators.SAME_CITY_VALIDATION_TEXT).first
+        try:
+            error.wait_for(state="visible", timeout=5000)
+        except PlaywrightTimeoutError:
+            return False
+        return error.is_visible()
+
+    def get_required_location_error_count(self) -> int:
+        body_text = self.page.locator("body").inner_text()
+        return body_text.count(HomePageLocators.SEARCH_REQUIRED_LOCATION_TEXT)
 
     def wait_for_search_results(self):
         self.wait_for_path(HomePageLocators.SEARCH_RESULTS_PATH)
@@ -231,6 +357,224 @@ class HomePage(BasePage):
     def is_logged_in(self) -> bool:
         return self.page.get_by_role("button", name=HomePageLocators.LOGIN_BUTTON_TEXT).count() == 0
 
+    def open_user_menu(self):
+        trigger = self.page.locator("header img[alt='avatar'][aria-haspopup='true']:visible").first
+        trigger.wait_for(state="visible", timeout=15000)
+        trigger.click(force=True)
+        self.page.locator("[role='menu']:visible").first.wait_for(state="visible", timeout=10000)
+
+    def get_logged_in_user_email(self) -> str:
+        self.open_user_menu()
+        email_text = self.page.locator("[role='menu']:visible span").filter(has_text="@").first
+        email_text.wait_for(state="visible", timeout=10000)
+        parts = [part.strip() for part in email_text.inner_text().splitlines() if part.strip()]
+        for part in reversed(parts):
+            if "@" in part:
+                return part
+        raise AssertionError("Logged-in user email was not found in the user menu.")
+
+    def get_visible_header_texts(self) -> list[str]:
+        texts: list[str] = []
+        items = self.page.locator(HomePageLocators.HEADER_VISIBLE_ITEMS)
+
+        for index in range(items.count()):
+            text = items.nth(index).inner_text().strip()
+            if text and text not in texts:
+                texts.append(text)
+
+        return texts
+
+    def has_expected_header_navigation(self) -> bool:
+        visible_texts = self.get_visible_header_texts()
+        return all(text in visible_texts for text in HomePageLocators.HEADER_EXPECTED_TEXTS)
+
+    def is_on_home_page(self) -> bool:
+        pathname = self.page.evaluate("() => window.location.pathname")
+        return pathname in {"", "/", "/en-us"}
+
+    def click_header_logo(self):
+        print("\n[nav] click logo")
+        logo = self.page.locator(HomePageLocators.HEADER_LOGO_LINK).first
+        logo.wait_for(state="visible", timeout=10000)
+        logo.click(force=True)
+        self.page.wait_for_function(
+            "() => ['', '/', '/en-us'].includes(window.location.pathname)",
+            timeout=15000,
+        )
+        self.page.wait_for_timeout(800)
+
+    def has_loaded_hero_banner(self) -> bool:
+        try:
+            banner_image = self._get_hero_banner_image()
+        except AssertionError:
+            return False
+
+        box = banner_image.bounding_box()
+        if not box or box["width"] <= 0 or box["height"] <= 0:
+            return False
+
+        for _ in range(5):
+            is_complete = banner_image.evaluate("(el) => el.complete")
+            natural_width = banner_image.evaluate("(el) => el.naturalWidth")
+            if is_complete and natural_width > 0:
+                return True
+            self.page.wait_for_timeout(800)
+
+        return False
+
+    def _get_hero_banner_link(self):
+        candidates = self.page.locator("main a[href]:visible")
+
+        for index in range(candidates.count()):
+            candidate = candidates.nth(index)
+            if candidate.locator("img:visible").count() == 0:
+                continue
+
+            box = candidate.bounding_box()
+            if not box or box["width"] < 600 or box["height"] < 180:
+                continue
+
+            href = candidate.get_attribute("href") or ""
+            if not href or href.startswith(("javascript:", "mailto:", "tel:")):
+                continue
+
+            candidate.wait_for(state="visible", timeout=10000)
+            return candidate
+
+        raise AssertionError("Hero banner link not found.")
+
+    def _get_hero_banner_image(self):
+        banner_link = self._get_hero_banner_link()
+        banner_image = banner_link.locator("img:visible").first
+        banner_image.wait_for(state="visible", timeout=10000)
+        return banner_image
+
+    def get_hero_banner_href(self) -> str:
+        banner_link = self._get_hero_banner_link()
+        return banner_link.get_attribute("href") or ""
+
+    def click_hero_banner(self):
+        print("\n[banner] click hero banner")
+        target_href = self.get_hero_banner_href()
+        self.goto(urljoin(self._get_base_url() + "/", target_href.lstrip("/")))
+        self.page.wait_for_timeout(3000)
+
+    def get_visible_popular_route_links(self) -> list[str]:
+        self.page.get_by_text(
+            HomePageLocators.POPULAR_ROUTES_SECTION_LINK_TEXT, exact=True
+        ).first.wait_for(state="visible", timeout=15000)
+        route_links = self.page.locator(HomePageLocators.POPULAR_ROUTE_LINKS)
+        hrefs: list[str] = []
+
+        for index in range(route_links.count()):
+            href = route_links.nth(index).get_attribute("href")
+            if href and href not in hrefs:
+                hrefs.append(href)
+
+        return hrefs
+
+    def open_first_popular_route(self) -> str:
+        print("\n[popular-routes] open first route")
+        route = self.page.locator(HomePageLocators.POPULAR_ROUTE_LINKS).first
+        route.wait_for(state="visible", timeout=15000)
+        href = route.get_attribute("href") or ""
+        route.click(force=True)
+        self.page.wait_for_timeout(3000)
+        return href
+
+    def is_on_popular_route_detail_page(self) -> bool:
+        return (
+            "/fixed-price-charter/" in self.page.url
+            and HomePageLocators.POPULAR_ROUTE_DETAIL_TEXT in self.page.locator("body").inner_text()
+        )
+
+    def _scroll_to_specialty_flights(self):
+        title = self.page.get_by_text(HomePageLocators.SPECIALTY_FLIGHTS_TITLE, exact=True).first
+        title.wait_for(state="visible", timeout=15000)
+        title.scroll_into_view_if_needed()
+        self.page.wait_for_timeout(800)
+
+    def has_specialty_flights_section(self) -> bool:
+        self._scroll_to_specialty_flights()
+        body_text = self.page.locator("body").inner_text()
+        return all(text in body_text for text in HomePageLocators.SPECIALTY_FLIGHT_TABS)
+
+    def click_specialty_flights_tab(self, tab_text: str):
+        print(f"\n[specialty] click tab: {tab_text}")
+        self._scroll_to_specialty_flights()
+        tab = self.page.get_by_role("button", name=tab_text).first
+        tab.wait_for(state="visible", timeout=10000)
+        tab.click(force=True)
+        self.page.wait_for_timeout(1200)
+
+    def get_specialty_view_all_href(self) -> str:
+        self._scroll_to_specialty_flights()
+        link = self.page.get_by_text(HomePageLocators.SPECIALTY_VIEW_ALL_TEXT, exact=True).first
+        link.wait_for(state="visible", timeout=10000)
+        return link.get_attribute("href") or ""
+
+    def get_specialty_destination_links(self) -> list[str]:
+        self._scroll_to_specialty_flights()
+        cards = self.page.locator(HomePageLocators.SPECIALTY_DESTINATION_LINKS)
+        hrefs: list[str] = []
+
+        for index in range(cards.count()):
+            href = cards.nth(index).get_attribute("href")
+            if href and href not in hrefs:
+                hrefs.append(href)
+
+        return hrefs
+
+    def open_specialty_view_all(self):
+        print("\n[specialty] open view all")
+        self._scroll_to_specialty_flights()
+        link = self.page.get_by_text(HomePageLocators.SPECIALTY_VIEW_ALL_TEXT, exact=True).first
+        link.wait_for(state="visible", timeout=10000)
+        link.click(force=True)
+        self.page.wait_for_timeout(3000)
+
+    def get_footer_link_texts(self) -> list[str]:
+        footer_links = self.page.locator(HomePageLocators.FOOTER_LINKS)
+        texts: list[str] = []
+
+        for index in range(footer_links.count()):
+            text = footer_links.nth(index).inner_text().strip()
+            if text and text not in texts:
+                texts.append(text)
+
+        return texts
+
+    def has_expected_footer_links(self) -> bool:
+        footer_texts = self.get_footer_link_texts()
+        return all(text in footer_texts for text in HomePageLocators.FOOTER_EXPECTED_LINK_TEXTS)
+
+    def get_inaccessible_footer_links(self) -> list[dict]:
+        inaccessible_links = []
+        footer_links = self.page.locator(HomePageLocators.FOOTER_LINKS)
+        checked_hrefs: set[str] = set()
+
+        for index in range(footer_links.count()):
+            href = footer_links.nth(index).get_attribute("href")
+            if not href or href in checked_hrefs:
+                continue
+            checked_hrefs.add(href)
+            if href.startswith(("mailto:", "tel:", "javascript:")):
+                continue
+            if href.startswith("http") and "jet-bay.com" not in href:
+                continue
+
+            target_url = urljoin(self.page.url, href.replace("/en-us", "", 1))
+            try:
+                response = self.page.request.get(
+                    target_url, timeout=15000, fail_on_status_code=False
+                )
+                if response.status >= 400:
+                    inaccessible_links.append({"href": target_url, "status": response.status})
+            except Exception as exc:
+                inaccessible_links.append({"href": target_url, "status": str(exc)})
+
+        return inaccessible_links
+
     def open_affiliate_partner_from_home(self):
         print("\n[affiliate] open from home page")
         opened = self._click_visible_link_by_href(
@@ -263,32 +607,12 @@ class HomePage(BasePage):
 
     def open_top_nav_menu_item(self, top_menu_text: str, menu_text: str, href_keyword: str):
         print(f"\n[nav] open {top_menu_text} -> {menu_text}")
-        header = self.page.locator("header").first
-        top_menu = header.get_by_text(top_menu_text, exact=True).first
-        top_menu.wait_for(state="visible", timeout=10000)
-        top_menu.hover()
-        self.page.wait_for_timeout(1000)
-
-        target_link = header.locator(
-            f"a[href='{href_keyword}']:visible:text-is('{menu_text}')"
-        ).first
-        if target_link.count() == 0:
-            target_link = header.locator(f"a[href='{href_keyword}']:visible").first
-        if target_link.count() == 0:
-            target_link = header.locator(
-                f"a[href*='{href_keyword}']:visible:text-is('{menu_text}')"
-            ).first
-        if target_link.count() == 0:
-            target_link = header.locator(f"a[href*='{href_keyword}']:visible").first
-        if target_link.count() == 0:
-            target_link = self.page.locator(
-                f"a[href*='{href_keyword}']:visible:text-is('{menu_text}')"
-            ).first
-        if target_link.count() == 0:
-            target_link = self.page.locator(f"a[href*='{href_keyword}']:visible").first
-        target_link.wait_for(state="visible", timeout=10000)
-        target_link.scroll_into_view_if_needed()
-        target_link.click(force=True)
+        target_href = self._resolve_menu_item_href(
+            top_menu_text=top_menu_text,
+            menu_text=menu_text,
+            href_keyword=href_keyword,
+        )
+        self.goto(urljoin(self._get_base_url() + "/", target_href.lstrip("/")))
 
     def _get_home_module_section(self, title_text: str, button_text: str):
         """先用模块标题定位模块，再在模块内找具体交互元素。"""
@@ -334,9 +658,78 @@ class HomePage(BasePage):
             self._goto_path(HomePageLocators.TRAVEL_CREDIT_PATH)
 
     def _get_empty_leg_section(self):
+        for title_text in HomePageLocators.EMPTY_LEG_SECTION_TITLES:
+            title = self.page.locator(f"h2:text-is('{title_text}')").first
+            if title.count() > 0:
+                return title.locator("xpath=ancestor::div[contains(@class, 'sm:mt-16')][1]")
         return self.page.locator(
             "h2:text-is('Empty Leg Near You')"
         ).first.locator("xpath=ancestor::div[contains(@class, 'sm:mt-16')][1]")
+
+    def has_empty_leg_section(self) -> bool:
+        section = self._get_empty_leg_section()
+        try:
+            section.wait_for(state="visible", timeout=15000)
+        except PlaywrightTimeoutError:
+            return False
+        return section.is_visible()
+
+    def wait_for_empty_leg_cards(self):
+        section = self._get_empty_leg_section()
+        section.wait_for(state="visible", timeout=15000)
+        cards = section.locator(HomePageLocators.EMPTY_LEG_ROUTE_CARDS)
+        if cards.count() == 0:
+            raise AssertionError("Empty Leg route cards were not found on the home page.")
+        cards.first.wait_for(state="visible", timeout=15000)
+        self.page.wait_for_timeout(1200)
+
+    def get_empty_leg_cards(self) -> list[dict]:
+        self.wait_for_empty_leg_cards()
+        cards = self._get_empty_leg_section().locator(HomePageLocators.EMPTY_LEG_ROUTE_CARDS)
+        return cards.evaluate_all(
+            """
+            (nodes) => nodes.map((card, index) => {
+                const routeColumns = card.querySelectorAll(
+                    "div.flex.justify-between.border-b > div.flex-1.min-w-0"
+                );
+                const getText = (node, selector, position = 0) => {
+                    if (!node) return "";
+                    const matches = node.querySelectorAll(selector);
+                    return matches[position]?.textContent?.trim() || "";
+                };
+                const departureNode = routeColumns[0];
+                const arrivalNode = routeColumns[1];
+                return {
+                    index,
+                    departure: getText(departureNode, "p", 0),
+                    departureMeta: getText(departureNode, "p", 1),
+                    arrival: getText(arrivalNode, "p", 0),
+                    arrivalMeta: getText(arrivalNode, "p", 1),
+                };
+            }).filter((card) => card.departure && card.arrival)
+            """
+        )
+
+    def get_empty_leg_route_pairs(self) -> list[tuple[str, str]]:
+        cards = self.get_empty_leg_cards()
+        return [(card["departure"], card["arrival"]) for card in cards]
+
+    def get_empty_leg_alert_email_value(self) -> str:
+        email_input = self._get_empty_leg_section().locator(
+            HomePageLocators.EMPTY_LEG_ALERT_EMAIL
+        ).first
+        email_input.wait_for(state="visible", timeout=15000)
+        return email_input.input_value().strip()
+
+    def get_empty_leg_prices(self) -> list[int]:
+        section_text = self._get_empty_leg_section().inner_text()
+        prices = re.findall(HomePageLocators.EMPTY_LEG_PRICE_PATTERN, section_text)
+        return [int(price.replace("USD", "").replace(",", "").strip()) for price in prices]
+
+    def get_empty_leg_book_button_count(self) -> int:
+        return self._get_empty_leg_section().get_by_role(
+            "button", name=HomePageLocators.EMPTY_LEG_BOOK_BUTTON_TEXT
+        ).count()
 
     def get_broken_empty_leg_images(self) -> list[dict]:
         broken_images = []

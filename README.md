@@ -26,6 +26,17 @@ PROJECT_TEMPLATE.md
 pytest -v
 ```
 
+## Search Diagnostics
+
+Use the request trace script when you need to inspect the search flow payloads on `dev` or `prod`:
+
+```sh
+set TEST_ENV=prod
+python scripts/trace_search_requests.py --headless --refresh-results-page --exercise-query-tabs
+```
+
+The script records `createSearchId`, `getSearchId`, and `searchList` requests, prints a compact summary in the terminal, and writes the full trace JSON into `artifacts/`.
+
 ## CI/CD
 
 This repository includes GitHub Actions workflows for UI automation:

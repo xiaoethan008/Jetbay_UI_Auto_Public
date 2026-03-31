@@ -1,11 +1,11 @@
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
 
 from locators.service_menu_page_locators import ServiceMenuPageLocators
 from pages.base_page import BasePage
 
 
 class ServiceMenuPage(BasePage):
-    """Services 菜单下各服务页面的通用页面对象。"""
+    """通用的服务菜单落地页对象。"""
 
     def wait_for_page(self, path: str):
         self.wait_for_path(path)
@@ -14,7 +14,7 @@ class ServiceMenuPage(BasePage):
         return expected_text in self.page.locator("body").inner_text()
 
     def load_all_content(self):
-        """通过滚动页面触发主内容区懒加载。"""
+        """通过滚动触发页面懒加载。"""
         self.page.wait_for_load_state("domcontentloaded")
         for _ in range(6):
             self.page.mouse.wheel(0, 1400)
@@ -32,34 +32,38 @@ class ServiceMenuPage(BasePage):
             try:
                 if not image.is_visible():
                     continue
-                is_in_viewport = image.evaluate(
-                    """
-                    (el) => {
-                        const rect = el.getBoundingClientRect();
-                        return rect.width > 0
-                            && rect.height > 0
-                            && rect.bottom > 0
-                            && rect.right > 0
-                            && rect.top < window.innerHeight
-                            && rect.left < window.innerWidth;
-                    }
-                    """
-                )
-                if not is_in_viewport:
-                    continue
+
                 box = image.bounding_box()
                 if not box or box["width"] <= 0 or box["height"] <= 0:
                     continue
 
-                is_complete = False
-                natural_width = 0
-                for _ in range(3):
-                    is_complete = image.evaluate("(el) => el.complete")
-                    natural_width = image.evaluate("(el) => el.naturalWidth")
-                    if is_complete and natural_width > 0:
+                image.scroll_into_view_if_needed()
+                self.page.wait_for_timeout(500)
+
+                image_state = {"complete": False, "naturalWidth": 0, "currentSrc": ""}
+                for _ in range(5):
+                    image_state = image.evaluate(
+                        """
+                        (el) => ({
+                            complete: el.complete,
+                            naturalWidth: el.naturalWidth,
+                            currentSrc: el.currentSrc || '',
+                        })
+                        """
+                    )
+                    if (
+                        image_state["complete"]
+                        and image_state["naturalWidth"] > 0
+                        and image_state["currentSrc"]
+                    ):
                         break
-                    self.page.wait_for_timeout(800)
-                if not is_complete or natural_width <= 0:
+                    self.page.wait_for_timeout(1000)
+
+                if (
+                    not image_state["complete"]
+                    or image_state["naturalWidth"] <= 0
+                    or not image_state["currentSrc"]
+                ):
                     broken_images.append(
                         {
                             "index": index,
@@ -152,12 +156,21 @@ class ServiceMenuPage(BasePage):
 
         return inaccessible_links
 
+    def _normalize_site_path(self, value: str) -> str:
+        path = urlparse(value).path.rstrip("/") or "/"
+        if path == "/en-us":
+            return "/"
+        if path.startswith("/en-us/"):
+            return path.replace("/en-us", "", 1) or "/"
+        return path
+
     def get_first_article_link(self) -> str | None:
-        """尝试从正文区域找一条文章或详情入口链接。"""
+        """尝试从正文区找到文章或详情入口。"""
         self.load_all_content()
-        links = self.page.locator("a[href]:visible")
-        current_path = self.page.url.rstrip("/")
+        links = self.page.locator("main a[href]:visible")
+        current_path = self._normalize_site_path(self.page.url)
         excluded_keywords = [
+            "/",
             "/empty-leg",
             "/private-jet-charter",
             "/group-air-charter",
@@ -184,13 +197,19 @@ class ServiceMenuPage(BasePage):
             href = links.nth(index).get_attribute("href")
             if not href or href.startswith(("javascript:", "mailto:", "tel:")):
                 continue
+
             target_url = urljoin(self.page.url, href)
-            if target_url.rstrip("/") == current_path:
-                continue
-            if any(keyword in target_url for keyword in excluded_keywords):
-                continue
             if "jet-bay.com" not in target_url:
                 continue
+
+            target_path = self._normalize_site_path(target_url)
+            if target_path == current_path or target_path == "/":
+                continue
+            if any(keyword in target_path for keyword in excluded_keywords):
+                continue
+            if len([segment for segment in target_path.split("/") if segment]) < 2:
+                continue
+
             return href
 
         return None
@@ -231,13 +250,19 @@ class ServiceMenuPage(BasePage):
             return True
 
         if "/empty-leg-recommendation" in self.page.url:
-            cards = self.page.locator(
-                "img[src*='emptyLegRec'], img[alt*='Empty-Leg'], img[alt*='empty-leg']"
+            cards = self.page.locator("div.cursor-pointer").filter(
+                has=self.page.locator(
+                    "img[src*='emptyLegRec'], img[alt*='Empty-Leg'], img[alt*='empty-leg']"
+                )
             )
             if cards.count() > 0:
-                cards.first.scroll_into_view_if_needed()
+                card = cards.first
+                card.scroll_into_view_if_needed()
                 self.page.wait_for_timeout(300)
-                cards.first.click(force=True)
+                try:
+                    card.click(force=True)
+                except Exception:
+                    card.evaluate("(el) => el.click()")
                 self.page.wait_for_load_state("domcontentloaded")
                 self.page.wait_for_timeout(2000)
                 return True

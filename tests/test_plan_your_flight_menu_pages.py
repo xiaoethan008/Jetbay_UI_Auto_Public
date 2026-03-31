@@ -7,8 +7,8 @@ PLAN_YOUR_FLIGHT_CASES = [
     ("How to Book", "/en-us/charter-guide/booking-process", "/charter-guide/booking-process", "How to Charter a Flight"),
     (
         "Empty Leg Recommendation",
-        "/en-us/empty-leg-recommendation",
-        "/empty-leg-recommendation",
+        "/en-us/charter-guide/empty-leg-recommendation",
+        "/charter-guide/empty-leg-recommendation",
         "Learn more about Empty Legs Flight",
     ),
     ("Destinations", "/en-us/destination", "/destination", "Explore Exciting New Destinations with JETBAY"),
@@ -37,9 +37,6 @@ def test_plan_your_flight_menu_pages(home_page, page, menu_text, href_keyword, p
     broken_images = menu_page.get_broken_page_images()
     unclickable_buttons = menu_page.get_unclickable_buttons()
     inaccessible_links = menu_page.get_inaccessible_links()
-
-    if menu_text == "Empty Leg Recommendation":
-        pytest.xfail("The current Empty Leg Recommendation page returns an upstream error page.")
 
     assert menu_page.has_expected_content(expected_text)
     assert broken_images == [], f"Broken images on {menu_text}: {broken_images}"

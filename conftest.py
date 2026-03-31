@@ -8,11 +8,11 @@ import runtime_environments
 sys.modules["config.environments"] = runtime_environments
 
 from framework.reporting import (
-    attach_failure_screenshot_to_allure,
-    save_failure_screenshot,
+    capture_failure_artifacts,
     write_allure_environment,
     write_allure_executor,
 )
+from pages.base_page import BasePage
 from pages.home_page import HomePage
 
 from runtime_environments import get_current_environment, get_current_environment_name
@@ -67,6 +67,9 @@ def page(playwright, request):
     page = context.new_page()
     page.set_default_navigation_timeout(60000)
     page.set_default_timeout(30000)
+    page.test_name = request.node.name
+    page._failure_screenshot_captured = False
+    page._failure_screenshot_attached = False
 
     request.node.page = page
 
@@ -88,12 +91,25 @@ def pytest_runtest_makereport(item, call):
     outcome = yield
     report = outcome.get_result()
 
-    if report.when != "call" or report.passed:
+    if report.when == "teardown":
         return
 
     page = getattr(item, "page", None)
     if page is None:
         return
 
-    save_failure_screenshot(page=page, test_name=item.name)
-    attach_failure_screenshot_to_allure(page=page, test_name=item.name)
+    error_page_message = None
+    try:
+        BasePage(page).assert_not_on_error_page(f"During {report.when}")
+    except AssertionError as exc:
+        error_page_message = str(exc)
+
+    if error_page_message:
+        report.outcome = "failed"
+        if report.passed:
+            report.longrepr = error_page_message
+        else:
+            report.longrepr = f"{report.longrepr}\n\n{error_page_message}"
+
+    if report.failed:
+        capture_failure_artifacts(page=page, test_name=item.name)

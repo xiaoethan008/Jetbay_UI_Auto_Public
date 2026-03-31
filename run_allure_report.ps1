@@ -11,11 +11,40 @@ $resultsPath = Join-Path $projectRoot $ResultsDir
 $reportPath = Join-Path $projectRoot $ReportDir
 $resultsHistoryPath = Join-Path $resultsPath "history"
 $reportHistoryPath = Join-Path $reportPath "history"
-$pythonExe = Join-Path $projectRoot ".\.venv\Scripts\python.exe"
 
-if (-not (Test-Path $pythonExe)) {
-    throw "Python executable not found: $pythonExe"
+function Get-PythonCommand {
+    $venvPython = Join-Path $projectRoot ".\.venv\Scripts\python.exe"
+    if (Test-Path $venvPython) {
+        return @{
+            FilePath = $venvPython
+            Arguments = @()
+            Display = $venvPython
+        }
+    }
+
+    $pythonCmd = Get-Command python -ErrorAction SilentlyContinue
+    if ($pythonCmd) {
+        return @{
+            FilePath = $pythonCmd.Source
+            Arguments = @()
+            Display = $pythonCmd.Source
+        }
+    }
+
+    $pyLauncher = Get-Command py -ErrorAction SilentlyContinue
+    if ($pyLauncher) {
+        return @{
+            FilePath = $pyLauncher.Source
+            Arguments = @("-3")
+            Display = "$($pyLauncher.Source) -3"
+        }
+    }
+
+    throw "Python executable not found. Checked: $venvPython, python in PATH, and py launcher."
 }
+
+$pythonCommand = Get-PythonCommand
+Write-Host "Using Python: $($pythonCommand.Display)" -ForegroundColor Cyan
 
 New-Item -ItemType Directory -Force -Path $resultsPath | Out-Null
 
@@ -33,7 +62,7 @@ if ($Headless.IsPresent) {
     $env:HEADLESS = "true"
 }
 
-& $pythonExe -m pytest -v -s --alluredir=$resultsPath
+& $pythonCommand.FilePath @($pythonCommand.Arguments + @("-m", "pytest", "-v", "-s", "--alluredir=$resultsPath"))
 if ($LASTEXITCODE -ne 0) {
     throw "Pytest failed with exit code $LASTEXITCODE"
 }

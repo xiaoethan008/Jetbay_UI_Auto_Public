@@ -12,6 +12,8 @@ allure-results/
 allure-report/
 screenshots/
 artifacts/
+.vscode/launch.json
+.vscode/settings.json
 
 .coverage
 htmlcov/

@@ -1,12 +1,16 @@
 from datetime import datetime
 
+import pytest
+
 from config.environments import get_current_environment
 from pages.affiliate_partner_page import AffiliatePartnerPage
 
 
 def test_affiliate_partner_already_submitted_when_logged_in(home_page, page):
-    """已登录用户提交 Affiliate Partner 表单后，应提示已提交过申请。"""
+    """登录用户提交 Affiliate Partner 表单后，应提示已提交过申请。"""
     login_config = get_current_environment()["login"]
+    if not login_config["email"] or not login_config["password"]:
+        pytest.skip("Login credentials are not configured for the current environment.")
 
     home_page.login_with_password(
         email=login_config["email"],
