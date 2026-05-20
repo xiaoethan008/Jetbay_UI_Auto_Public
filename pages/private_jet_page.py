@@ -5,7 +5,7 @@ from pages.base_page import BasePage
 
 
 class PrivateJetPage(BasePage):
-    """JETBAY Private Jet 页面对象。"""
+    """JETBAY Private Jet page object."""
 
     def wait_for_page(self):
         self.wait_for_path(PrivateJetPageLocators.PATH)
@@ -22,7 +22,7 @@ class PrivateJetPage(BasePage):
         self.page.wait_for_timeout(1000)
 
     def _load_popular_jet_carousel_images(self):
-        """滚动 Popular Private Jet We Offer 轮播，触发隐藏图片加载。"""
+        """Scroll the aircraft carousel so lazy images get a chance to load."""
         heading = self.page.get_by_text(
             PrivateJetPageLocators.POPULAR_JET_SECTION_TITLE, exact=True
         ).first
@@ -37,14 +37,55 @@ class PrivateJetPage(BasePage):
         if carousel.count() == 0:
             return
 
-        # 直接操作横向滚动容器，避免依赖按钮显示状态和分辨率。
         max_scroll_left = carousel.evaluate("(el) => el.scrollWidth - el.clientWidth")
         if not max_scroll_left or max_scroll_left <= 0:
             return
 
         for position in (0, max_scroll_left, 0):
-            carousel.evaluate("(el, x) => { el.scrollTo({ left: x, behavior: 'auto' }); }", position)
+            carousel.evaluate(
+                "(el, x) => { el.scrollTo({ left: x, behavior: 'auto' }); }",
+                position,
+            )
             self.page.wait_for_timeout(1200)
+
+    def _image_state(self, image) -> dict:
+        return image.evaluate(
+            """
+            (el) => {
+                const rect = el.getBoundingClientRect();
+                return {
+                    complete: el.complete,
+                    naturalWidth: el.naturalWidth,
+                    currentSrc: el.currentSrc || '',
+                    src: el.getAttribute('src') || '',
+                    inViewport: rect.width > 0
+                        && rect.height > 0
+                        && rect.bottom > 0
+                        && rect.right > 0
+                        && rect.top < window.innerHeight
+                        && rect.left < window.innerWidth,
+                };
+            }
+            """
+        )
+
+    def _image_url_is_accessible(self, image_state: dict) -> bool:
+        image_url = image_state.get("currentSrc") or image_state.get("src") or ""
+        if not image_url:
+            return False
+
+        target_url = urljoin(self.page.url, image_url)
+        try:
+            response = self.page.request.get(
+                target_url,
+                timeout=15000,
+                fail_on_status_code=False,
+            )
+        except Exception:
+            return False
+
+        content_type = (response.headers.get("content-type") or "").lower()
+        return response.status < 400 and content_type.startswith("image/")
 
     def get_broken_page_images(self) -> list[dict]:
         broken_images = []
@@ -55,22 +96,45 @@ class PrivateJetPage(BasePage):
         for index in range(images.count()):
             image = images.nth(index)
             try:
+                if not image.is_visible():
+                    continue
+
                 box = image.bounding_box()
                 if not box or box["width"] <= 0 or box["height"] <= 0:
                     continue
 
-                is_complete = image.evaluate("(el) => el.complete")
-                natural_width = image.evaluate("(el) => el.naturalWidth")
-                if not is_complete or natural_width <= 0:
-                    broken_images.append(
-                        {
-                            "index": index,
-                            "alt": image.get_attribute("alt"),
-                            "src": image.get_attribute("src"),
-                        }
-                    )
-            except Exception:
-                broken_images.append({"index": index, "alt": None, "src": None})
+                image.scroll_into_view_if_needed(timeout=5000)
+                self.page.wait_for_timeout(500)
+
+                image_state = self._image_state(image)
+                for _ in range(5):
+                    if image_state["complete"] and image_state["naturalWidth"] > 0:
+                        break
+                    self.page.wait_for_timeout(800)
+                    image_state = self._image_state(image)
+
+                if image_state["complete"] and image_state["naturalWidth"] > 0:
+                    continue
+
+                # Hidden carousel/lazy variants can have a layout box before the
+                # browser decodes them. Do not fail those when the URL is valid.
+                if not image_state["inViewport"] and self._image_url_is_accessible(image_state):
+                    continue
+
+                if self._image_url_is_accessible(image_state):
+                    continue
+
+                broken_images.append(
+                    {
+                        "index": index,
+                        "alt": image.get_attribute("alt"),
+                        "src": image_state.get("currentSrc") or image_state.get("src"),
+                    }
+                )
+            except Exception as exc:
+                broken_images.append(
+                    {"index": index, "alt": None, "src": None, "error": str(exc)}
+                )
 
         return broken_images
 

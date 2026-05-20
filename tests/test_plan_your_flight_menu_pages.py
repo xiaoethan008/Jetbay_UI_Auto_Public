@@ -4,16 +4,16 @@ from pages.service_menu_page import ServiceMenuPage
 
 
 PLAN_YOUR_FLIGHT_CASES = [
-    ("How to Book", "/en-us/charter-guide/booking-process", "/charter-guide/booking-process", "How to Charter a Flight"),
+    ("How to Book", "/booking-process", "/booking-process", "How to Charter a Flight"),
     (
         "Empty Leg Recommendation",
-        "/en-us/charter-guide/empty-leg-recommendation",
-        "/charter-guide/empty-leg-recommendation",
+        "/empty-leg-recommendation",
+        "/empty-leg-recommendation",
         "Learn more about Empty Legs Flight",
     ),
     ("Destinations", "/en-us/destination", "/destination", "Explore Exciting New Destinations with JETBAY"),
     ("Airports", "/en-us/airports", "/airports", "Connecting You to Premier Private Jet Airports"),
-    ("Video Centre", "/en-us/charter-guide/video-centre", "/charter-guide/video-centre", "Where Business Aviation Comes to Life"),
+    ("Video Centre", "/video-centre", "/video-centre", "Where Business Aviation Comes to Life"),
 ]
 
 

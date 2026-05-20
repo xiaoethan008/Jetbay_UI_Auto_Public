@@ -99,10 +99,11 @@ def pytest_runtest_makereport(item, call):
         return
 
     error_page_message = None
-    try:
-        BasePage(page).assert_not_on_error_page(f"During {report.when}")
-    except AssertionError as exc:
-        error_page_message = str(exc)
+    if item.get_closest_marker("allow_error_page") is None:
+        try:
+            BasePage(page).assert_not_on_error_page(f"During {report.when}")
+        except AssertionError as exc:
+            error_page_message = str(exc)
 
     if error_page_message:
         report.outcome = "failed"
