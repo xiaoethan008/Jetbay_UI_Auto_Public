@@ -12,6 +12,7 @@ from framework.reporting import (
     write_allure_environment,
     write_allure_executor,
 )
+from framework.quality_report import QualityReportPlugin, build_item_metadata
 from pages.base_page import BasePage
 from pages.home_page import HomePage
 
@@ -33,6 +34,37 @@ def _get_int_env(name: str, default: int) -> int:
         return int(value)
     except ValueError:
         return default
+
+
+def pytest_configure(config):
+    """初始化质量报告插件，session 结束时会统一输出 HTML / CSV / XLSX。"""
+    config._quality_report = QualityReportPlugin(
+        environment_name=get_current_environment_name(),
+        environment_config=get_current_environment(),
+    )
+
+
+def pytest_runtest_setup(item):
+    """给 Allure 注入业务模块、中文标题和优先级。"""
+    try:
+        import allure
+    except ImportError:
+        return
+
+    metadata = build_item_metadata(item)
+    severity_map = {
+        "P0": allure.severity_level.BLOCKER,
+        "P1": allure.severity_level.CRITICAL,
+        "P2": allure.severity_level.NORMAL,
+        "P3": allure.severity_level.MINOR,
+    }
+    try:
+        allure.dynamic.feature(metadata["module"])
+        allure.dynamic.title(metadata["title"])
+        allure.dynamic.severity(severity_map.get(metadata["priority"], allure.severity_level.NORMAL))
+    except Exception:
+        # Allure 在少数非标准收集/执行上下文中可能没有可写生命周期，不能因此影响用例执行。
+        return
 
 
 @pytest.fixture(scope="session")
@@ -91,15 +123,14 @@ def pytest_runtest_makereport(item, call):
     outcome = yield
     report = outcome.get_result()
 
-    if report.when == "teardown":
-        return
-
     page = getattr(item, "page", None)
-    if page is None:
-        return
 
     error_page_message = None
-    if item.get_closest_marker("allow_error_page") is None:
+    if (
+        report.when != "teardown"
+        and page is not None
+        and item.get_closest_marker("allow_error_page") is None
+    ):
         try:
             BasePage(page).assert_not_on_error_page(f"During {report.when}")
         except AssertionError as exc:
@@ -113,4 +144,16 @@ def pytest_runtest_makereport(item, call):
             report.longrepr = f"{report.longrepr}\n\n{error_page_message}"
 
     if report.failed:
-        capture_failure_artifacts(page=page, test_name=item.name)
+        if page is not None:
+            capture_failure_artifacts(page=page, test_name=item.name)
+
+    quality_report = getattr(item.config, "_quality_report", None)
+    if quality_report is not None:
+        quality_report.record_report(item=item, report=report, page=page)
+
+
+def pytest_sessionfinish(session, exitstatus):
+    """测试执行结束后生成面向 QA 的质量报告。"""
+    quality_report = getattr(session.config, "_quality_report", None)
+    if quality_report is not None:
+        quality_report.write_reports(exitstatus=exitstatus)

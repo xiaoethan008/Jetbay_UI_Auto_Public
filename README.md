@@ -51,7 +51,7 @@ Recommended GitHub repository secrets:
 - `JETBAY_TEST_LOGIN_PASSWORD`
 - `WECOM_WEBHOOK_URL` (optional, for Enterprise WeChat notifications and report screenshots)
 
-The public repository workflows require the first three secrets above. `WECOM_WEBHOOK_URL` is optional and is used by the regression workflow to send an Enterprise WeChat summary plus an Allure overview screenshot.
+The public repository workflows require the first three secrets above. `WECOM_WEBHOOK_URL` is optional and is used by the regression workflow to send one Enterprise WeChat image containing the enriched Allure overview.
 
 GitHub setup path:
 
@@ -99,6 +99,32 @@ Repository -> Settings -> Pages -> Build and deployment -> Source = GitHub Actio
 
 If Allure is enabled, failed test screenshots will also be attached to the Allure report.
 To keep the `Trend` chart across runs and avoid duplicate test entries in a single report, prefer `run_allure_report.ps1`, because it clears the current `allure-results`, restores the previous `history`, runs pytest, and then generates a fresh report.
+
+## QA Quality Reports
+
+Every pytest run also writes a business-readable QA quality report under:
+
+```text
+artifacts/reports/<run_time>/
+```
+
+The report set includes:
+
+- `官网回归质量报告_<version>.html`: readable summary with module statistics, failures, skipped cases, and linked evidence.
+- `官网回归质量报告_<version>.xlsx`: Excel version for QA/product review.
+- `官网回归质量报告_<version>.csv`: test case execution details.
+- `quality_results.json`: raw data for follow-up automation.
+
+The report version defaults to `V4.0.3` and can be overridden:
+
+```sh
+set QA_REPORT_VERSION=V4.0.3
+pytest -v
+```
+
+If a matching issue list exists at `artifacts/问题清单/官网回归问题清单_<version>.csv`, the quality report will merge its fixed/unfixed status into the summary.
+
+The GitHub Actions workflow also injects this quality data into the top of `allure-report/index.html` before uploading and deploying the Allure report. The WeCom screenshot therefore still captures Allure, but the first screen becomes a management summary with pass rate, failed/skipped counts, open issue count, top failed cases, and open issues.
 
 ## Environments
 

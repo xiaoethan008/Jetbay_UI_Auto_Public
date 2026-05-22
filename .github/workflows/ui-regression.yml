@@ -49,6 +49,11 @@ jobs:
         if: always()
         run: allure generate allure-results -o allure-report --clean
 
+      - name: Enrich Allure report for management
+        if: always()
+        continue-on-error: true
+        run: python scripts/enrich_allure_report.py --report-dir allure-report --quality-root artifacts/reports
+
       - name: Upload Allure results
         if: always()
         uses: actions/upload-artifact@v6
@@ -63,6 +68,14 @@ jobs:
         with:
           name: screenshots-regression
           path: screenshots
+          if-no-files-found: ignore
+
+      - name: Upload QA quality reports
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: quality-reports-regression
+          path: artifacts/reports
           if-no-files-found: ignore
 
       - name: Upload Allure HTML report
@@ -120,7 +133,7 @@ jobs:
           pip install playwright
           python -m playwright install --with-deps chromium
 
-      - name: Capture Allure report screenshot
+      - name: Capture report screenshot
         if: always()
         run: |
           python - <<'PY'
@@ -132,11 +145,13 @@ jobs:
 
           from playwright.sync_api import sync_playwright
 
+          screenshot_path = pathlib.Path("report-overview.png")
           report_dir = pathlib.Path("allure-report")
-          screenshot_path = pathlib.Path("allure-report-overview.png")
+          report_file = report_dir / "index.html"
+          report_url = "http://127.0.0.1:8123/index.html"
 
-          if not (report_dir / "index.html").exists():
-              print("Allure report index.html not found; skipping screenshot.")
+          if not report_file.exists():
+              print("Report HTML not found; skipping screenshot.")
               raise SystemExit(0)
 
           server = ThreadingHTTPServer(
@@ -150,7 +165,7 @@ jobs:
               with sync_playwright() as p:
                   browser = p.chromium.launch(headless=True)
                   page = browser.new_page(viewport={"width": 1600, "height": 1200})
-                  page.goto("http://127.0.0.1:8123/index.html", wait_until="networkidle", timeout=60000)
+                  page.goto(report_url, wait_until="networkidle", timeout=60000)
                   page.screenshot(path=str(screenshot_path), full_page=False)
                   browser.close()
               print(f"Saved screenshot to {screenshot_path}")
@@ -162,14 +177,7 @@ jobs:
       - name: Send WeCom notification
         env:
           WECOM_WEBHOOK_URL: ${{ secrets.WECOM_WEBHOOK_URL }}
-          REPOSITORY: ${{ github.repository }}
-          BRANCH: ${{ github.ref_name }}
-          EVENT_NAME: ${{ github.event_name }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          REGRESSION_RESULT: ${{ needs.regression.result }}
-          DEPLOY_RESULT: ${{ needs.deploy-report.result }}
-          REPORT_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/
-          SCREENSHOT_PATH: allure-report-overview.png
+          SCREENSHOT_PATH: report-overview.png
         run: |
           python - <<'PY'
           import base64
@@ -183,44 +191,7 @@ jobs:
               print("WECOM_WEBHOOK_URL is not configured; skipping notification.")
               raise SystemExit(0)
 
-          regression_result = os.getenv("REGRESSION_RESULT", "unknown")
-          deploy_result = os.getenv("DEPLOY_RESULT", "unknown")
-          repository = os.getenv("REPOSITORY", "")
-          branch = os.getenv("BRANCH", "")
-          event_name = os.getenv("EVENT_NAME", "")
-          run_url = os.getenv("RUN_URL", "")
-          report_url = os.getenv("REPORT_URL", "")
           screenshot_path = os.getenv("SCREENSHOT_PATH", "")
-
-          overall_success = regression_result == "success" and deploy_result in {"success", "skipped"}
-          status_text = "SUCCESS" if overall_success else "FAILED"
-          status_color = "info" if overall_success else "warning"
-
-          report_line = (
-              f"> Report: [Open Allure Report]({report_url})"
-              if deploy_result == "success"
-              else "> Report: GitHub Pages not available for this run"
-          )
-
-          content = "\n".join(
-              [
-                  f"## UI Regression <font color=\"{status_color}\">{status_text}</font>",
-                  f"> Repository: `{repository}`",
-                  f"> Branch: `{branch}`",
-                  f"> Trigger: `{event_name}`",
-                  f"> Regression: `{regression_result}`",
-                  f"> Pages Deploy: `{deploy_result}`",
-                  f"> Run: [Open GitHub Actions Run]({run_url})",
-                  report_line,
-              ]
-          )
-
-          markdown_payload = {
-              "msgtype": "markdown",
-              "markdown": {
-                  "content": content,
-              },
-          }
 
           def send(payload):
               request = urllib.request.Request(
@@ -243,6 +214,6 @@ jobs:
                   },
               }
               send(image_payload)
-
-          send(markdown_payload)
+          else:
+              print("Report screenshot not found; no WeCom message sent.")
           PY

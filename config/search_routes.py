@@ -1,5 +1,6 @@
-"""Built-in UI-searchable route candidates used by proposal tests."""
+"""自动化搜索用例内置的可搜索航线候选数据。"""
 
+# 单程 / 往返用例会从这些城市对里挑选可成功出结果的组合。
 SEARCHABLE_CITY_PAIRS = (
     ("Singapore", "Hong Kong"),
     ("Hong Kong", "Singapore"),
@@ -15,6 +16,7 @@ SEARCHABLE_CITY_PAIRS = (
     ("Jakarta", "Singapore"),
 )
 
+# 多程用例需要连续选择多个城市，顺序会影响页面自动带入下一段出发地。
 SEARCHABLE_MULTI_CITY_ROUTES = (
     ("Singapore", "Hong Kong", "Bangkok", "Singapore"),
     ("Hong Kong", "Singapore", "Tokyo", "Hong Kong"),
