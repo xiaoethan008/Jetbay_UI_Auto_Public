@@ -34,8 +34,15 @@ def _merge_current_issue_list(data):
     version = data.get("summary", {}).get("report_version", "")
     if not version:
         return
-    issue_path = Path("artifacts") / "问题清单" / f"官网回归问题清单_{version}.csv"
-    if not issue_path.exists():
+    issue_paths = (
+        Path("artifacts")
+        / f"官网{version}（官网回归）"
+        / "问题清单"
+        / f"官网回归问题清单_{version}.csv",
+        Path("artifacts") / "问题清单" / f"官网回归问题清单_{version}.csv",
+    )
+    issue_path = next((path for path in issue_paths if path.exists()), None)
+    if not issue_path:
         return
 
     with issue_path.open("r", encoding="utf-8-sig", newline="") as handle:
@@ -80,6 +87,31 @@ def _card(label, value, css=""):
     )
 
 
+def _normalize_module_name(value):
+    module = " ".join(str(value or "Unclassified").split())
+    if not module:
+        return "Unclassified"
+    if "/" in module:
+        return module.split("/", 1)[0].strip() or module
+    return module
+
+
+def _merged_module_stats(module_stats):
+    merged = {}
+    for module, counts in module_stats.items():
+        normalized = _normalize_module_name(module)
+        target = merged.setdefault(normalized, {"passed": 0, "failed": 0, "skipped": 0})
+        for key in ("passed", "failed", "skipped"):
+            target[key] += int(counts.get(key, 0) or 0)
+    return dict(
+        sorted(
+            merged.items(),
+            key=lambda item: (item[1].get("failed", 0), item[1].get("skipped", 0), item[0]),
+            reverse=True,
+        )
+    )
+
+
 def _row(label, value):
     return (
         "<tr>"
@@ -93,6 +125,31 @@ def _list_items(items, renderer, empty_text):
     if not items:
         return f'<li class="jb-muted">{html.escape(empty_text)}</li>'
     return "".join(f"<li>{renderer(item)}</li>" for item in items)
+
+
+def _table_html(title, headers, rows, empty_text):
+    if rows:
+        body = "".join(
+            "<tr>"
+            + "".join(f"<td>{html.escape(str(cell))}</td>" for cell in row)
+            + "</tr>"
+            for row in rows
+        )
+    else:
+        body = (
+            f'<tr><td colspan="{len(headers)}" class="jb-muted">'
+            f"{html.escape(empty_text)}</td></tr>"
+        )
+
+    return (
+        f"<h3>{html.escape(title)}</h3>"
+        "<table>"
+        "<tr>"
+        + "".join(f"<th>{html.escape(header)}</th>" for header in headers)
+        + "</tr>"
+        + body
+        + "</table>"
+    )
 
 
 def _conclusion_text(summary, failed_tests, open_issues, status_text):
@@ -146,7 +203,7 @@ def build_summary_html(data, source_path: Path):
     )
 
     module_rows = []
-    for module, counts in sorted(summary.get("module_stats", {}).items()):
+    for module, counts in _merged_module_stats(summary.get("module_stats", {})).items():
         module_rows.append(
             "<tr>"
             f"<td>{html.escape(module)}</td>"
@@ -165,25 +222,83 @@ def build_summary_html(data, source_path: Path):
     )
     module_table_json = json.dumps(module_table_html, ensure_ascii=False)
 
+    attention_tests = [case for case in tests if case.get("outcome") in {"failed", "skipped"}]
+    category_counts = Counter(
+        case.get("category") or case.get("outcome") or "未分类"
+        for case in attention_tests
+    )
+    category_rows = [
+        [category, count]
+        for category, count in category_counts.most_common()
+    ]
+    category_table_html = _table_html(
+        "失败 / 跳过分类概览",
+        ["分类", "数量"],
+        category_rows,
+        "本轮没有失败或跳过用例",
+    )
+    category_table_json = json.dumps(category_table_html, ensure_ascii=False)
+
+    module_attention = {}
+    for case in attention_tests:
+        module = _normalize_module_name(case.get("module"))
+        item = module_attention.setdefault(
+            module,
+            {"failed": 0, "skipped": 0, "sample": ""},
+        )
+        if case.get("outcome") == "failed":
+            item["failed"] += 1
+        elif case.get("outcome") == "skipped":
+            item["skipped"] += 1
+        if not item["sample"]:
+            item["sample"] = _short_text(case.get("title") or case.get("name"), 70)
+    attention_rows = [
+        [module, data["failed"], data["skipped"], data["sample"]]
+        for module, data in sorted(
+            module_attention.items(),
+            key=lambda item: (item[1]["failed"], item[1]["skipped"], item[0]),
+            reverse=True,
+        )[:8]
+    ]
+    attention_table_html = _table_html(
+        "需关注模块 Top",
+        ["模块", "失败", "跳过", "代表用例"],
+        attention_rows,
+        "本轮没有需关注模块",
+    )
+    attention_table_json = json.dumps(attention_table_html, ensure_ascii=False)
+
     failed_html = _list_items(
         failed_tests[:5],
         lambda case: (
             f"<strong>{html.escape(case.get('priority', ''))}</strong> "
-            f"{html.escape(_short_text(case.get('module'), 50))} - "
+            f"{html.escape(_short_text(_normalize_module_name(case.get('module')), 50))} - "
             f"{html.escape(_short_text(case.get('title'), 90))}"
         ),
         "本次没有失败用例",
     )
-    issue_html = _list_items(
-        open_issues[:5],
-        lambda issue: (
-            f"<strong>{html.escape(issue.get('Bug ID', ''))}</strong> "
-            f"<strong>{html.escape(issue.get('Priority', ''))}</strong> "
-            f"{html.escape(_short_text(issue.get('Module'), 50))} - "
-            f"{html.escape(_short_text(issue.get('Issue Type'), 90))}"
-        ),
-        "当前版本问题清单无未修复项",
-    )
+    if open_issues:
+        issue_panel_title = "未修复问题 Top 5"
+        issue_html = _list_items(
+            open_issues[:5],
+            lambda issue: (
+                f"<strong>{html.escape(issue.get('Bug ID', ''))}</strong> "
+                f"<strong>{html.escape(issue.get('Priority', ''))}</strong> "
+                f"{html.escape(_short_text(issue.get('Module'), 50))} - "
+                f"{html.escape(_short_text(issue.get('Issue Type'), 90))}"
+            ),
+            "当前版本问题清单无未修复项",
+        )
+    elif issues:
+        issue_panel_title = "问题清单状态"
+        fixed_count = len([issue for issue in issues if issue.get(FIXED_FIELD) == "是"])
+        issue_html = (
+            f"<li><strong class='jb-ok'>已全部修复</strong> "
+            f"当前版本问题清单共 {len(issues)} 个，已修复 {fixed_count} 个。</li>"
+        )
+    else:
+        issue_panel_title = "问题清单状态"
+        issue_html = '<li class="jb-muted">未找到当前版本问题清单</li>'
 
     skipped_note = ""
     if skipped_tests and not failed_tests:
@@ -273,13 +388,17 @@ def build_summary_html(data, source_path: Path):
     grid-template-columns: 1fr 1fr 1.15fr;
     gap: 14px;
     align-items: start;
+    height: 190px;
+    overflow: hidden;
   }}
   .jb-panel {{
     background: #fff;
     border: 1px solid #dbe9e6;
     border-radius: 8px;
     padding: 10px 12px;
-    min-height: 118px;
+    height: 100%;
+    min-height: 0;
+    overflow: auto;
   }}
   .jb-panel h3 {{
     margin: 0 0 8px;
@@ -318,24 +437,35 @@ def build_summary_html(data, source_path: Path):
     box-sizing: border-box;
     padding: 15px;
   }}
-  .jb-module-widget h3 {{
+  .jb-side-widget {{
+    background: #fff;
+    border: 1px solid #ddd;
+    box-sizing: border-box;
+    padding: 15px;
+  }}
+  .jb-module-widget h3,
+  .jb-side-widget h3 {{
     margin: 0 0 12px;
     font-size: 22px;
     font-weight: 400;
     text-transform: uppercase;
   }}
-  .jb-module-widget table {{
+  .jb-module-widget table,
+  .jb-side-widget table {{
     width: 100%;
     border-collapse: collapse;
     font-size: 13px;
   }}
   .jb-module-widget th,
-  .jb-module-widget td {{
+  .jb-module-widget td,
+  .jb-side-widget th,
+  .jb-side-widget td {{
     border-bottom: 1px solid #eceff1;
     padding: 8px 10px;
     text-align: left;
   }}
-  .jb-module-widget th {{ color: #60717c; font-weight: 600; }}
+  .jb-module-widget th,
+  .jb-side-widget th {{ color: #60717c; font-weight: 600; }}
   @media (max-width: 1100px) {{
     .jb-management-summary {{ margin-left: 0; padding-left: 18px; }}
     #content {{ margin-top: 0; }}
@@ -368,7 +498,7 @@ def build_summary_html(data, source_path: Path):
       {skipped_note}
     </div>
     <div class="jb-panel">
-      <h3>未修复问题 Top 5</h3>
+      <h3>{html.escape(issue_panel_title)}</h3>
       <ul>{issue_html}</ul>
     </div>
   </div>
@@ -384,18 +514,29 @@ def build_summary_html(data, source_path: Path):
       document.documentElement.style.setProperty("--jb-side-width", "180px");
     }}
     function hideLowValueAllureWidgets() {{
-      var hiddenTitles = ["SUITES", "ENVIRONMENT", "CATEGORIES", "FEATURES BY STORIES"];
+      var hiddenTitles = ["SUITES", "ENVIRONMENT", "CATEGORIES", "FEATURES BY STORIES", "TREND", "EXECUTORS"];
       var widgets = document.querySelectorAll("#content .widget");
       widgets.forEach(function (widget) {{
         var titleNode = widget.querySelector(".widget__title");
-        var title = ((titleNode && titleNode.textContent) || widget.textContent || "").trim().toUpperCase();
+        var rawText = (widget.textContent || "").trim();
+        var title = ((titleNode && titleNode.textContent) || rawText || "").trim().toUpperCase();
         var shouldHide = hiddenTitles.some(function (hiddenTitle) {{
           return title.indexOf(hiddenTitle) === 0;
-        }});
+        }}) || rawText.toUpperCase() === "LOADING...";
         if (shouldHide) {{
           widget.style.display = "none";
         }}
       }});
+    }}
+    function ensureSideWidget(className, html) {{
+      var grid = document.querySelector("#content .widgets-grid");
+      if (!grid || document.querySelector("." + className)) {{
+        return;
+      }}
+      var widget = document.createElement("div");
+      widget.className = "widget jb-side-widget " + className;
+      widget.innerHTML = html;
+      grid.appendChild(widget);
     }}
     function ensureModuleOverviewWidget() {{
       var grid = document.querySelector("#content .widgets-grid");
@@ -407,31 +548,56 @@ def build_summary_html(data, source_path: Path):
       widget.innerHTML = {module_table_json};
       grid.appendChild(widget);
     }}
+    function ensureSupplementWidgets() {{
+      ensureSideWidget("jb-category-widget", {category_table_json});
+      ensureSideWidget("jb-attention-widget", {attention_table_json});
+    }}
     function positionModuleOverviewWidget() {{
       var grid = document.querySelector("#content .widgets-grid");
       var moduleWidget = document.querySelector(".jb-module-widget");
       if (!grid || !moduleWidget) {{
         return;
       }}
-      var visibleWidgets = Array.from(grid.querySelectorAll(".widget")).filter(function (widget) {{
-        return !widget.classList.contains("jb-module-widget") && getComputedStyle(widget).display !== "none";
-      }});
-      var summaryWidget = visibleWidgets.find(function (widget) {{
-        return (widget.textContent || "").trim().toUpperCase().indexOf("ALLURE REPORT") === 0;
-      }}) || visibleWidgets[0];
-      if (!summaryWidget) {{
+      var gap = 15;
+      var left = Math.floor(grid.clientWidth * 0.5) + gap;
+      var top = 0;
+      var width = Math.max(360, grid.clientWidth - left - gap);
+      moduleWidget.style.position = "absolute";
+      moduleWidget.style.left = left + "px";
+      moduleWidget.style.top = top + "px";
+      moduleWidget.style.width = width + "px";
+    }}
+    function positionSupplementWidgets() {{
+      var grid = document.querySelector("#content .widgets-grid");
+      var moduleWidget = document.querySelector(".jb-module-widget");
+      var categoryWidget = document.querySelector(".jb-category-widget");
+      var attentionWidget = document.querySelector(".jb-attention-widget");
+      if (!grid || !categoryWidget || !attentionWidget) {{
         return;
       }}
-      moduleWidget.style.position = "absolute";
-      moduleWidget.style.left = summaryWidget.offsetLeft + "px";
-      moduleWidget.style.top = (summaryWidget.offsetTop + summaryWidget.offsetHeight + 15) + "px";
-      moduleWidget.style.width = summaryWidget.offsetWidth + "px";
+      var gap = 15;
+      var left = gap;
+      var width = Math.max(360, Math.floor(grid.clientWidth * 0.5) - gap * 2);
+      [categoryWidget, attentionWidget].forEach(function (widget) {{
+        widget.style.position = "absolute";
+        widget.style.left = left + "px";
+        widget.style.width = width + "px";
+      }});
+      categoryWidget.style.top = "0px";
+      attentionWidget.style.top = (categoryWidget.offsetTop + categoryWidget.offsetHeight + gap) + "px";
+      var moduleBottom = moduleWidget ? moduleWidget.offsetTop + moduleWidget.offsetHeight : 0;
+      var neededHeight = Math.max(moduleBottom, attentionWidget.offsetTop + attentionWidget.offsetHeight) + gap;
+      if (neededHeight > grid.offsetHeight) {{
+        grid.style.minHeight = neededHeight + "px";
+      }}
     }}
     function refreshJetbayReportLayout() {{
       syncJetbaySummaryHeight();
       hideLowValueAllureWidgets();
       ensureModuleOverviewWidget();
+      ensureSupplementWidgets();
       positionModuleOverviewWidget();
+      positionSupplementWidgets();
     }}
     window.addEventListener("load", refreshJetbayReportLayout);
     window.addEventListener("resize", refreshJetbayReportLayout);

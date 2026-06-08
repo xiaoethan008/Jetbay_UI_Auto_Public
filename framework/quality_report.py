@@ -58,6 +58,7 @@ def _module_from_nodeid(nodeid: str) -> str:
         ("test_home_top", "Home / Top Navigation"),
         ("test_home_logged", "Home / Logged-in Navigation"),
         ("test_home_empty", "Home / Empty Leg"),
+        ("test_login_expired", "Login / Session Expiry"),
         ("test_login", "Login"),
         ("test_404", "404 / SEO"),
         ("test_company", "Company Menu"),
@@ -117,16 +118,22 @@ def _failure_category(outcome: str, longrepr: str) -> str:
 
 
 def _read_issue_list(version: str) -> tuple[Path | None, list[dict]]:
-    issue_path = (
+    issue_paths = (
+        Path("artifacts")
+        / f"官网{version}（官网回归）"
+        / "问题清单"
+        / f"官网回归问题清单_{version}.csv",
         Path("artifacts")
         / "问题清单"
-        / f"官网回归问题清单_{version}.csv"
+        / f"官网回归问题清单_{version}.csv",
     )
-    if not issue_path.exists():
-        return None, []
 
-    with issue_path.open("r", encoding="utf-8-sig", newline="") as handle:
-        return issue_path, _refresh_issue_rows(list(csv.DictReader(handle)))
+    for issue_path in issue_paths:
+        if issue_path.exists():
+            with issue_path.open("r", encoding="utf-8-sig", newline="") as handle:
+                return issue_path, _refresh_issue_rows(list(csv.DictReader(handle)))
+
+    return None, []
 
 
 def _extract_first_url(*values) -> str:

@@ -18,6 +18,9 @@ from pages.home_page import HomePage
 
 from runtime_environments import get_current_environment, get_current_environment_name
 
+SEO_TEST_FILES = {"test_404_seo.py"}
+SEO_SKIP_ENVIRONMENTS = {"dev", "test"}
+
 
 def _get_bool_env(name: str, default: bool) -> bool:
     value = os.getenv(name)
@@ -34,6 +37,28 @@ def _get_int_env(name: str, default: int) -> int:
         return int(value)
     except ValueError:
         return default
+
+
+def pytest_ignore_collect(collection_path, config):
+    """dev/test 环境不收集 SEO 专项用例，避免未配置 SEO 能力时产生误报。"""
+    env_name = get_current_environment_name()
+    if env_name in SEO_SKIP_ENVIRONMENTS and collection_path.name in SEO_TEST_FILES:
+        return True
+    return False
+
+
+def pytest_collection_modifyitems(config, items):
+    """即使显式指定 SEO 文件，dev/test 环境也统一标记跳过。"""
+    env_name = get_current_environment_name()
+    if env_name not in SEO_SKIP_ENVIRONMENTS:
+        return
+
+    skip_seo = pytest.mark.skip(reason=f"SEO tests are disabled in {env_name} environment.")
+    for item in items:
+        item_path = getattr(item, "path", None)
+        file_name = item_path.name if item_path is not None else ""
+        if file_name in SEO_TEST_FILES:
+            item.add_marker(skip_seo)
 
 
 def pytest_configure(config):

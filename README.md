@@ -26,6 +26,18 @@ PROJECT_TEMPLATE.md
 pytest -v
 ```
 
+In `dev` and `test` environments, SEO-specific pytest cases are not collected by default; run SEO checks separately only when the target environment has the required SEO configuration.
+
+## Local Environment Variables
+
+Local credentials can be stored in `.env.local`. This file is ignored by git and is loaded automatically by `runtime_environments.py`.
+
+```sh
+copy .env.example .env.local
+```
+
+Then fill in local-only values such as the test login account and database credentials.
+
 ## Search Diagnostics
 
 Use the request trace script when you need to inspect the search flow payloads on `dev` or `prod`:

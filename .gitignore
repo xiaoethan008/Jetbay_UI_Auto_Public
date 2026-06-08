@@ -8,9 +8,14 @@ __pycache__/
 .pytest_cache/
 .playwright/
 
+.env
+.env.*
+!.env.example
+
 allure-results/
 allure-report/
 screenshots/
+prod_chunks/
 artifacts/
 .vscode/launch.json
 .vscode/settings.json
