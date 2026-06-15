@@ -29,7 +29,13 @@ class HomePageLocators:
     LOGIN_PASSWORD_INPUT = "input[name='password']"
     LOGIN_SUBMIT_BUTTON_TEXT = "Log In"
     HEADER_VISIBLE_ITEMS = "header a:visible, header button:visible, header [role='link']:visible"
-    HEADER_LOGO_LINK = "header a[href='/en-us']:visible"
+    HEADER_LOGO_LINK_CANDIDATES = (
+        "header a:has(img[alt='logo']):visible",
+        "header a:has(img[src*='jetbay_default_logo']):visible",
+        "header a[aria-label='Cruip']:has(img):visible",
+        "header a[href='/en-us']:visible",
+        "header a[href='/']:visible",
+    )
     SERVICES_MENU_TEXT = "Services"
     PRIVATE_JET_MENU_TEXT = "On-Demand Charter"
     AFFILIATE_PARTNER_BUTTON_TEXT = "Join Program"
@@ -57,9 +63,9 @@ class HomePageLocators:
     )
     SPECIALTY_VIEW_ALL_TEXT = "View All Destinations"
     SPECIALTY_VIEW_ALL_HREFS = {
-        "Island Escapes": "/en-us/island-destinations",
-        "Ski Escapes": "/en-us/ski-destinations",
-        "Golf Escapes": "/en-us/golf-destinations",
+        "Island Escapes": "/island-destinations",
+        "Ski Escapes": "/ski-destinations",
+        "Golf Escapes": "/golf-destinations",
     }
     SPECIALTY_DESTINATION_LINKS = "main a[href*='-destinations/']:visible"
 

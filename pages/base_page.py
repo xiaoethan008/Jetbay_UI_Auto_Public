@@ -1,3 +1,4 @@
+from playwright.sync_api import Error as PlaywrightError
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
 from framework.reporting import (
@@ -143,10 +144,31 @@ class BasePage:
             )
         )
 
+    def _is_browser_navigation_error(self) -> bool:
+        current_url = (self.page.url or "").lower()
+        if current_url.startswith("chrome-error://"):
+            return True
+
+        body_text = self._get_body_text().lower()
+        return "err_" in body_text or "this site can't be reached" in body_text
+
     def goto(self, url: str, wait_until: str = "domcontentloaded", timeout: int = 60000):
         """打开指定页面地址。"""
-        self.page.goto(url, wait_until=wait_until, timeout=timeout)
-        self.assert_not_on_error_page(f"After navigating to {url}")
+        for attempt in range(2):
+            try:
+                self.page.goto(url, wait_until=wait_until, timeout=timeout)
+                if self._is_browser_navigation_error():
+                    raise RuntimeError(f"Browser failed to navigate to {url}: {self.page.url}")
+                self.assert_not_on_error_page(f"After navigating to {url}")
+                return
+            except (PlaywrightError, PlaywrightTimeoutError, RuntimeError):
+                if attempt == 1:
+                    raise
+                self.page.wait_for_timeout(1500)
+                try:
+                    self.page.goto("about:blank", wait_until="domcontentloaded", timeout=10000)
+                except Exception:
+                    pass
 
     def wait_for_path(self, path: str, timeout: int = 30000):
         """等待当前页面路径包含目标路径。"""

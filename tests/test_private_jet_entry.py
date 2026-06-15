@@ -1,4 +1,5 @@
 from pages.private_jet_page import PrivateJetPage
+from pages.base_page import BasePage
 from runtime_environments import get_current_environment
 
 
@@ -100,11 +101,17 @@ def test_private_jet_multi_city_three_legs_keeps_search_cta_visible(page):
     """Multi-City 添加第三段航程后，底部搜索按钮不能被 Hero 容器裁切。"""
     page.set_viewport_size({"width": 1900, "height": 817})
     base_url = get_current_environment()["base_url"].rstrip("/")
-    page.goto(f"{base_url}/private-jet-charter", wait_until="networkidle")
+    BasePage(page).goto(f"{base_url}/private-jet-charter", wait_until="domcontentloaded", timeout=90000)
+    try:
+        page.wait_for_load_state("networkidle", timeout=15000)
+    except Exception:
+        pass
+    # 等待前端完成 hydration，避免按钮已显示但点击事件尚未绑定导致误判。
+    page.wait_for_timeout(1500)
 
     # 复现历史问题：多程表单增加到 3 段后，表单高度会超过 Hero 区域。
-    page.get_by_text("Multi-City", exact=True).click()
-    page.get_by_text("Add another flight", exact=True).click()
+    page.get_by_role("button", name="Multi-City").click()
+    page.get_by_role("button", name="Add another flight").click()
 
     search_button = page.locator("button:has-text('Search Available Aircraft')").last
     search_button.wait_for(state="attached")

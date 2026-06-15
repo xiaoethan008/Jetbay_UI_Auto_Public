@@ -20,6 +20,7 @@ from runtime_environments import get_current_environment, get_current_environmen
 
 SEO_TEST_FILES = {"test_404_seo.py"}
 SEO_SKIP_ENVIRONMENTS = {"dev", "test"}
+MANUAL_DEBUG_TEST_FILES = {"test_inspect.py"}
 
 
 def _get_bool_env(name: str, default: bool) -> bool:
@@ -41,6 +42,9 @@ def _get_int_env(name: str, default: int) -> int:
 
 def pytest_ignore_collect(collection_path, config):
     """dev/test 环境不收集 SEO 专项用例，避免未配置 SEO 能力时产生误报。"""
+    if collection_path.name in MANUAL_DEBUG_TEST_FILES:
+        return True
+
     env_name = get_current_environment_name()
     if env_name in SEO_SKIP_ENVIRONMENTS and collection_path.name in SEO_TEST_FILES:
         return True

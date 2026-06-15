@@ -338,6 +338,91 @@ class HomePage(BasePage):
             has=self.page.locator("input[name='password']")
         ).first
 
+    def _has_local_login_info(self) -> bool:
+        return self.page.evaluate(
+            """
+            () => {
+                const raw = localStorage.getItem('JETBAY_INFO');
+                if (!raw) return false;
+                try {
+                    const info = JSON.parse(raw);
+                    return Boolean(info && (info.token || info.id || info.email));
+                } catch {
+                    return Boolean(raw);
+                }
+            }
+            """
+        )
+
+    def _get_local_login_email(self) -> str:
+        return self.page.evaluate(
+            """
+            () => {
+                const raw = localStorage.getItem('JETBAY_INFO');
+                if (!raw) return '';
+                try {
+                    const info = JSON.parse(raw);
+                    return info.email || '';
+                } catch {
+                    return '';
+                }
+            }
+            """
+        )
+
+    def _has_completed_login_state(self) -> bool:
+        return self.page.evaluate(
+            """
+            () => {
+                const raw = localStorage.getItem('JETBAY_INFO');
+                let hasLocalLoginInfo = false;
+                if (raw) {
+                    try {
+                        const info = JSON.parse(raw);
+                        hasLocalLoginInfo = Boolean(info && (info.token || info.id || info.email));
+                    } catch {
+                        hasLocalLoginInfo = Boolean(raw);
+                    }
+                }
+
+                const visible = (el) => {
+                    const rect = el.getBoundingClientRect();
+                    return rect.width > 0 && rect.height > 0;
+                };
+                const appHeader = Array.from(document.querySelectorAll('header'))
+                    .find((header) => visible(header) && header.querySelector('img[alt="logo"]'));
+                const hasHeaderLogin = appHeader
+                    ? Array.from(appHeader.querySelectorAll('button, a'))
+                        .some((el) => visible(el) && el.textContent.trim() === 'Log In')
+                    : false;
+                const hasAvatar = appHeader
+                    ? Array.from(appHeader.querySelectorAll('img[alt="avatar"]')).some(visible)
+                    : false;
+                const hasLoginDialog = Array.from(document.querySelectorAll('[role="dialog"]'))
+                    .some((dialog) => visible(dialog) && dialog.querySelector('input[name="password"]'));
+
+                return hasLocalLoginInfo || hasAvatar || (!hasHeaderLogin && !hasLoginDialog);
+            }
+            """
+        )
+
+    def _close_visible_login_dialog(self):
+        dialog = self._get_login_dialog()
+        if dialog.count() == 0 or not dialog.is_visible():
+            return
+
+        buttons = dialog.locator("button:visible")
+        for index in range(buttons.count()):
+            button = buttons.nth(index)
+            text = button.inner_text().strip()
+            box = button.bounding_box()
+            if text or not box:
+                continue
+            if box["width"] >= 16 and box["height"] >= 16:
+                button.click(force=True)
+                self.page.wait_for_timeout(500)
+                return
+
     def login_with_password(self, email: str, password: str):
         print("\n[login] submit credentials")
         self.open_login_dialog()
@@ -352,18 +437,60 @@ class HomePage(BasePage):
             self.page.locator("button:visible").filter(
                 has_text=HomePageLocators.LOGIN_SUBMIT_BUTTON_TEXT
             ).last.click()
-        self.page.wait_for_timeout(5000)
+        self.page.wait_for_function(
+            """
+            () => {
+                const raw = localStorage.getItem('JETBAY_INFO');
+                let hasLocalLoginInfo = false;
+                if (raw) {
+                    try {
+                        const info = JSON.parse(raw);
+                        hasLocalLoginInfo = Boolean(info && (info.token || info.id || info.email));
+                    } catch {
+                        hasLocalLoginInfo = Boolean(raw);
+                    }
+                }
+
+                const visible = (el) => {
+                    const rect = el.getBoundingClientRect();
+                    return rect.width > 0 && rect.height > 0;
+                };
+                const appHeader = Array.from(document.querySelectorAll('header'))
+                    .find((header) => visible(header) && header.querySelector('img[alt="logo"]'));
+                const hasHeaderLogin = appHeader
+                    ? Array.from(appHeader.querySelectorAll('button, a'))
+                        .some((el) => visible(el) && el.textContent.trim() === 'Log In')
+                    : false;
+                const hasAvatar = appHeader
+                    ? Array.from(appHeader.querySelectorAll('img[alt="avatar"]')).some(visible)
+                    : false;
+                const hasLoginDialog = Array.from(document.querySelectorAll('[role="dialog"]'))
+                    .some((dialog) => visible(dialog) && dialog.querySelector('input[name="password"]'));
+
+                return hasLocalLoginInfo || hasAvatar || (!hasHeaderLogin && !hasLoginDialog);
+            }
+            """,
+            timeout=20000,
+        )
+        self._close_visible_login_dialog()
+        if self.page.locator("header img[alt='avatar']:visible").count() == 0:
+            self.page.reload(wait_until="domcontentloaded", timeout=90000)
+            self.page.wait_for_timeout(3000)
 
     def is_logged_in(self) -> bool:
-        return self.page.get_by_role("button", name=HomePageLocators.LOGIN_BUTTON_TEXT).count() == 0
+        return self._has_completed_login_state()
 
     def open_user_menu(self):
-        trigger = self.page.locator("header img[alt='avatar'][aria-haspopup='true']:visible").first
+        trigger = self.page.locator("header img[alt='avatar']:visible").first
         trigger.wait_for(state="visible", timeout=15000)
         trigger.click(force=True)
         self.page.locator("[role='menu']:visible").first.wait_for(state="visible", timeout=10000)
 
     def get_logged_in_user_email(self) -> str:
+        local_email = self._get_local_login_email()
+        if local_email:
+            return local_email
+
         self.open_user_menu()
         email_text = self.page.locator("[role='menu']:visible span").filter(has_text="@").first
         email_text.wait_for(state="visible", timeout=10000)
@@ -392,10 +519,22 @@ class HomePage(BasePage):
         pathname = self.page.evaluate("() => window.location.pathname")
         return pathname in {"", "/", "/en-us"}
 
+    def _get_header_logo_link(self):
+        for selector in HomePageLocators.HEADER_LOGO_LINK_CANDIDATES:
+            candidate = self.page.locator(selector).first
+            try:
+                candidate.wait_for(state="visible", timeout=2500)
+                box = candidate.bounding_box()
+                if box and box["width"] > 0 and box["height"] > 0:
+                    return candidate
+            except PlaywrightTimeoutError:
+                continue
+
+        raise AssertionError("Header logo link was not found with the known visible logo selectors.")
+
     def click_header_logo(self):
         print("\n[nav] click logo")
-        logo = self.page.locator(HomePageLocators.HEADER_LOGO_LINK).first
-        logo.wait_for(state="visible", timeout=10000)
+        logo = self._get_header_logo_link()
         logo.click(force=True)
         self.page.wait_for_function(
             "() => ['', '/', '/en-us'].includes(window.location.pathname)",

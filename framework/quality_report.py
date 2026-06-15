@@ -99,6 +99,88 @@ def build_item_metadata(item) -> dict:
     }
 
 
+_TEST_CASE_ROWS: list[dict] | None = None
+
+
+def _normalize_match_text(value: str) -> str:
+    return re.sub(r"\s+", "", _safe_text(value)).lower()
+
+
+def _match_terms(value: str) -> set[str]:
+    normalized = _normalize_match_text(value)
+    terms = set(re.findall(r"[a-z0-9]+", normalized))
+    cjk_text = "".join(re.findall(r"[\u4e00-\u9fff]+", normalized))
+    terms.update(cjk_text[index : index + 2] for index in range(max(0, len(cjk_text) - 1)))
+    return {term for term in terms if len(term) >= 2}
+
+
+def _load_test_case_rows() -> list[dict]:
+    global _TEST_CASE_ROWS
+    if _TEST_CASE_ROWS is not None:
+        return _TEST_CASE_ROWS
+
+    case_path = Path("artifacts") / "测试用例清单.csv"
+    if not case_path.exists():
+        _TEST_CASE_ROWS = []
+        return _TEST_CASE_ROWS
+
+    with case_path.open("r", encoding="utf-8-sig", newline="") as handle:
+        _TEST_CASE_ROWS = list(csv.DictReader(handle))
+    return _TEST_CASE_ROWS
+
+
+def _test_case_match_score(row: dict, nodeid: str, title: str) -> int:
+    file_path = nodeid.split("::", 1)[0].replace("\\", "/")
+    script_text = _safe_text(row.get("自动化脚本", "")).replace("\\", "/")
+    if file_path not in script_text:
+        return 0
+
+    score = 20
+    normalized_title = _normalize_match_text(title)
+    normalized_case_name = _normalize_match_text(row.get("用例名称", ""))
+    if normalized_case_name and normalized_case_name == normalized_title:
+        score += 100
+    elif normalized_case_name and (
+        normalized_case_name in normalized_title or normalized_title in normalized_case_name
+    ):
+        score += 50
+
+    common_terms = _match_terms(row.get("用例名称", "")) & _match_terms(title)
+    if common_terms:
+        score += min(len(common_terms), 12) * 5
+
+    node_name = _normalize_match_text(nodeid.rsplit("::", 1)[-1])
+    if normalized_case_name and normalized_case_name in node_name:
+        score += 20
+    return score
+
+
+def _resolve_test_case_info(nodeid: str, title: str) -> dict:
+    best_row = None
+    best_score = 0
+    for row in _load_test_case_rows():
+        score = _test_case_match_score(row, nodeid, title)
+        if score > best_score:
+            best_score = score
+            best_row = row
+
+    if not best_row:
+        return {
+            "test_case_id": "",
+            "associated_test_case": f"{title}（{nodeid}）",
+            "operation_steps": f"执行自动化用例 {nodeid}；具体操作见测试脚本。",
+        }
+
+    case_id = _safe_text(best_row.get("用例ID", "")).strip()
+    case_name = _safe_text(best_row.get("用例名称", "")).strip() or title
+    steps = _safe_text(best_row.get("测试步骤", "")).strip()
+    return {
+        "test_case_id": case_id,
+        "associated_test_case": f"{case_id} {case_name}".strip(),
+        "operation_steps": steps or f"执行自动化用例 {nodeid}；具体操作见测试脚本。",
+    }
+
+
 def _failure_category(outcome: str, longrepr: str) -> str:
     if outcome == "passed":
         return "通过"
@@ -108,12 +190,14 @@ def _failure_category(outcome: str, longrepr: str) -> str:
     lowered = longrepr.lower()
     if "detected site error/404 page" in lowered:
         return "错误页"
+    if "登录 token" in longrepr or "重新登录" in longrepr or "session" in lowered:
+        return "登录态校验"
+    if "assertionerror" in lowered or "assert " in lowered:
+        return "断言失败"
     if "strict mode violation" in lowered or "locator." in lowered:
         return "脚本定位/选择器"
     if "timeout" in lowered:
         return "超时/环境"
-    if "assertionerror" in lowered or "assert " in lowered:
-        return "断言失败"
     return "执行异常"
 
 
@@ -264,6 +348,7 @@ class QualityReportPlugin:
         metadata = build_item_metadata(item)
         marker_names = metadata["markers"]
         title = metadata["title"]
+        test_case_info = _resolve_test_case_info(nodeid, title)
         longrepr = _safe_text(getattr(report, "longrepr", ""))
         screenshot_path = ""
         current_url = ""
@@ -284,6 +369,7 @@ class QualityReportPlugin:
             "nodeid": nodeid,
             "name": item.name,
             "title": title,
+            **test_case_info,
             "module": metadata["module"],
             "priority": metadata["priority"],
             "outcome": report.outcome,
@@ -370,6 +456,9 @@ class QualityReportPlugin:
             "priority",
             "outcome",
             "category",
+            "test_case_id",
+            "associated_test_case",
+            "operation_steps",
             "title",
             "nodeid",
             "duration_seconds",
@@ -503,6 +592,8 @@ class QualityReportPlugin:
                 f"<td>{html.escape(row['module'])}</td>"
                 f"<td>{html.escape(row['priority'])}</td>"
                 f"<td>{html.escape(row['category'])}</td>"
+                f"<td>{html.escape(row.get('associated_test_case', ''))}</td>"
+                f"<td>{html.escape(row.get('operation_steps', ''))}</td>"
                 f"<td>{html.escape(row['title'])}<div class='small'>{html.escape(row['nodeid'])}</div></td>"
                 f"<td>{html.escape(row.get('current_url', ''))}</td>"
                 f"<td>{screenshot}</td>"
@@ -511,7 +602,7 @@ class QualityReportPlugin:
             )
         return (
             f"<h2>{html.escape(title)}</h2><table>"
-            "<tr><th>结果</th><th>模块</th><th>优先级</th><th>分类</th><th>用例</th><th>URL</th><th>证据</th><th>失败摘要</th></tr>"
+            "<tr><th>结果</th><th>模块</th><th>优先级</th><th>分类</th><th>关联用例</th><th>操作步骤</th><th>用例</th><th>URL</th><th>证据</th><th>失败摘要</th></tr>"
             + "".join(trs)
             + "</table>"
         )
@@ -563,13 +654,15 @@ class QualityReportPlugin:
             (
                 "用例明细",
                 [
-                    ["结果", "模块", "优先级", "分类", "用例标题", "Node ID", "URL", "截图", "失败摘要"],
+                    ["结果", "模块", "优先级", "分类", "关联用例", "操作步骤", "用例标题", "Node ID", "URL", "截图", "失败摘要"],
                     *[
                         [
                             row["outcome"],
                             row["module"],
                             row["priority"],
                             row["category"],
+                            row.get("associated_test_case", ""),
+                            row.get("operation_steps", ""),
                             row["title"],
                             row["nodeid"],
                             row.get("current_url", ""),

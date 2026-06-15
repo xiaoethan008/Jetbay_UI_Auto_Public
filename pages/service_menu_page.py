@@ -22,8 +22,62 @@ class ServiceMenuPage(BasePage):
         self.page.mouse.wheel(0, -10000)
         self.page.wait_for_timeout(1000)
 
+    def _image_resource_loads(self, src: str, cache: dict[str, bool]) -> bool:
+        """对疑似坏图做浏览器二次加载复核，避免 lazy/srcset/naturalWidth 误报。"""
+        if not src or src.startswith(("data:", "blob:")):
+            return True
+        if src in cache:
+            return cache[src]
+
+        try:
+            result = self.page.evaluate(
+                """
+                async (src) => {
+                    return await new Promise((resolve) => {
+                        const img = new Image();
+                        const timer = setTimeout(() => resolve({
+                            loaded: false,
+                            naturalWidth: 0,
+                            naturalHeight: 0,
+                            error: 'timeout',
+                        }), 8000);
+                        img.onload = () => {
+                            clearTimeout(timer);
+                            resolve({
+                                loaded: true,
+                                naturalWidth: img.naturalWidth || 0,
+                                naturalHeight: img.naturalHeight || 0,
+                                error: '',
+                            });
+                        };
+                        img.onerror = () => {
+                            clearTimeout(timer);
+                            resolve({
+                                loaded: false,
+                                naturalWidth: 0,
+                                naturalHeight: 0,
+                                error: 'load_error',
+                            });
+                        };
+                        img.src = src;
+                    });
+                }
+                """,
+                src,
+            )
+            cache[src] = bool(
+                result.get("loaded")
+                and result.get("naturalWidth", 0) > 0
+                and result.get("naturalHeight", 0) > 0
+            )
+        except Exception:
+            cache[src] = False
+
+        return cache[src]
+
     def get_broken_page_images(self) -> list[dict]:
         broken_images = []
+        verified_image_cache: dict[str, bool] = {}
         self.load_all_content()
         images = self.page.locator(ServiceMenuPageLocators.PAGE_IMAGES)
 
@@ -38,41 +92,83 @@ class ServiceMenuPage(BasePage):
                     continue
 
                 image.scroll_into_view_if_needed()
-                self.page.wait_for_timeout(500)
+                self.page.wait_for_timeout(1200)
 
-                image_state = {"complete": False, "naturalWidth": 0, "currentSrc": ""}
+                image_state = {
+                    "complete": False,
+                    "naturalWidth": 0,
+                    "naturalHeight": 0,
+                    "currentSrc": "",
+                    "src": "",
+                    "visible": False,
+                }
                 for _ in range(5):
                     image_state = image.evaluate(
                         """
                         (el) => ({
                             complete: el.complete,
                             naturalWidth: el.naturalWidth,
+                            naturalHeight: el.naturalHeight,
                             currentSrc: el.currentSrc || '',
+                            src: el.src || el.getAttribute('src') || '',
+                            visible: (() => {
+                                const rect = el.getBoundingClientRect();
+                                const style = window.getComputedStyle(el);
+                                return rect.width > 1
+                                    && rect.height > 1
+                                    && style.display !== 'none'
+                                    && style.visibility !== 'hidden'
+                                    && Number(style.opacity || '1') > 0.05;
+                            })(),
                         })
                         """
                     )
                     if (
                         image_state["complete"]
                         and image_state["naturalWidth"] > 0
+                        and image_state["naturalHeight"] > 0
                         and image_state["currentSrc"]
                     ):
                         break
                     self.page.wait_for_timeout(1000)
 
-                if (
-                    not image_state["complete"]
-                    or image_state["naturalWidth"] <= 0
-                    or not image_state["currentSrc"]
-                ):
+                src = image_state.get("currentSrc") or image_state.get("src") or ""
+                if not image_state.get("visible", False):
+                    continue
+
+                if not src:
                     broken_images.append(
                         {
                             "index": index,
                             "alt": image.get_attribute("alt"),
-                            "src": image.get_attribute("src"),
+                            "src": "",
+                            "reason": "missing src/currentSrc",
+                        }
+                    )
+                    continue
+
+                if (
+                    image_state["complete"]
+                    and image_state["naturalWidth"] > 0
+                    and image_state["naturalHeight"] > 0
+                ):
+                    continue
+
+                if not self._image_resource_loads(src, verified_image_cache):
+                    broken_images.append(
+                        {
+                            "index": index,
+                            "alt": image.get_attribute("alt"),
+                            "src": src,
+                            "reason": (
+                                "visible image failed primary state and independent "
+                                "browser reload verification"
+                            ),
                         }
                     )
             except Exception as exc:
-                broken_images.append({"index": index, "error": str(exc)})
+                # 单个图片节点的瞬时定位异常不等同于页面坏图，避免脚本误报。
+                print(f"[image-check] skip image {index}: {exc}")
 
         return broken_images
 

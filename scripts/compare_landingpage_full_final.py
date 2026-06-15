@@ -1,3 +1,6 @@
+# One-off/manual SEO image-alt audit script.
+# Not part of full regression by default; confirm with the user before running.
+
 import argparse
 import csv
 import json

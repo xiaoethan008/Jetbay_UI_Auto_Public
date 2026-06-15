@@ -1,3 +1,6 @@
+# One-off/manual SEO image-alt extraction script.
+# Not part of full regression by default; confirm with the user before running.
+
 import argparse
 import json
 from urllib.parse import urljoin

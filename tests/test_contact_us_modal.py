@@ -25,10 +25,19 @@ RETIRED_PHONE_PATTERN = re.compile(r"(?:\+?1[\s-]*)?917[\s-]*795[\s-]*8851")
 def _open_contact_us_dialog(page, base_url: str, path: str, viewport_size: dict):
     """打开指定页面的 Contact Us 弹窗，并返回弹窗定位器。"""
     page.set_viewport_size(viewport_size)
-    page.goto(f"{base_url}{path}", wait_until="networkidle")
+    page.goto(f"{base_url}{path}", wait_until="domcontentloaded", timeout=90000)
+    try:
+        page.wait_for_load_state("load", timeout=45000)
+    except Exception:
+        pass
+    page.wait_for_timeout(1500)
 
     # 页面里可能存在桌面/移动两套同名按钮，取当前可见的第一个入口即可。
-    page.get_by_role("button", name="Contact Us").first.click()
+    contact_button = page.get_by_role(
+        "button", name=re.compile(r"Contact Us|联系我们|聯繫我們")
+    ).first
+    contact_button.wait_for(state="visible", timeout=30000)
+    contact_button.click()
     dialog = page.locator('[role="dialog"]').filter(
         has_text="Contact your personal consultant"
     ).first
