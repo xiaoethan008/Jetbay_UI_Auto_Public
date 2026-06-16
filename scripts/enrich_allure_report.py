@@ -583,7 +583,25 @@ def build_summary_html(data, source_path: Path):
         widget.style.left = left + "px";
         widget.style.width = width + "px";
       }});
-      categoryWidget.style.top = "0px";
+
+      // Allure 原生总览圆环不总是在 widgets-grid 里，给左侧先预留一块安全高度。
+      var nativeLeftBottom = 215;
+      Array.prototype.slice.call(grid.querySelectorAll(":scope > .widget")).forEach(function (widget) {{
+        if (
+          widget.classList.contains("jb-module-widget") ||
+          widget.classList.contains("jb-side-widget") ||
+          window.getComputedStyle(widget).display === "none"
+        ) {{
+          return;
+        }}
+        var widgetLeft = parseFloat(widget.style.left || widget.offsetLeft || 0);
+        if (widgetLeft < grid.clientWidth * 0.5) {{
+          var widgetTop = parseFloat(widget.style.top || widget.offsetTop || 0);
+          nativeLeftBottom = Math.max(nativeLeftBottom, widgetTop + widget.offsetHeight);
+        }}
+      }});
+
+      categoryWidget.style.top = (nativeLeftBottom + gap) + "px";
       attentionWidget.style.top = (categoryWidget.offsetTop + categoryWidget.offsetHeight + gap) + "px";
       var moduleBottom = moduleWidget ? moduleWidget.offsetTop + moduleWidget.offsetHeight : 0;
       var neededHeight = Math.max(moduleBottom, attentionWidget.offsetTop + attentionWidget.offsetHeight) + gap;
