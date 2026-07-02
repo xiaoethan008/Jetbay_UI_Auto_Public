@@ -11,6 +11,9 @@ ENVIRONMENT_DEFAULTS = {
             "email": "",
             "password": "",
         },
+        "form": {
+            "email": "",
+        },
         "database": {
             "name": "",
             "host": "",
@@ -26,6 +29,9 @@ ENVIRONMENT_DEFAULTS = {
         "login": {
             "email": "",
             "password": "",
+        },
+        "form": {
+            "email": "",
         },
         "database": {
             "name": "",
@@ -97,13 +103,18 @@ def get_current_environment() -> dict:
     defaults = ENVIRONMENT_DEFAULTS[env_name]
     prefix = f"JETBAY_{env_name.upper()}"
     login_defaults = defaults.get("login", {})
+    form_defaults = defaults.get("form", {})
     database_defaults = defaults.get("database", {})
+    login_email = _get_env(f"{prefix}_LOGIN_EMAIL", login_defaults.get("email", ""))
 
     return {
         "base_url": _clean_url(_get_env(f"{prefix}_BASE_URL", defaults.get("base_url", ""))),
         "login": {
-            "email": _get_env(f"{prefix}_LOGIN_EMAIL", login_defaults.get("email", "")),
+            "email": login_email,
             "password": _get_env(f"{prefix}_LOGIN_PASSWORD", login_defaults.get("password", "")),
+        },
+        "form": {
+            "email": _get_env(f"{prefix}_FORM_EMAIL", form_defaults.get("email", "")) or login_email,
         },
         "database": {
             "name": _get_env(f"{prefix}_DB_NAME", database_defaults.get("name", "")),

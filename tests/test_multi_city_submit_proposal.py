@@ -1,5 +1,4 @@
-from datetime import datetime
-
+from framework.test_data import make_unique_test_email
 from locators.home_page_locators import HomePageLocators
 from pages.search_results_page import SearchResultsPage
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
@@ -9,7 +8,7 @@ def test_submit_multi_city_proposal(home_page, page):
     """提交多程方案。"""
     first_name = "Codex"
     last_name = "Tester"
-    email = f"codex.multicity+{datetime.now().strftime('%Y%m%d%H%M%S')}@example.com"
+    email = make_unique_test_email("multicity")
     phone_number = "1234567890"
     message = "Automated multi-city charter proposal submission."
 

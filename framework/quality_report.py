@@ -46,6 +46,7 @@ def _relative_link(target: str | Path, base_dir: Path) -> str:
 def _module_from_nodeid(nodeid: str) -> str:
     """根据测试文件名给报告补充业务模块，后续也可以改为读取 pytest marker。"""
     rules = [
+        ("test_v411_requirements_regression", "V4.1.1 / Requirements"),
         ("test_sos_recommendation_api", "SOS / 推荐逻辑"),
         ("test_error_page_detection", "Error Page Guard"),
         ("test_contact_us", "Contact Us"),

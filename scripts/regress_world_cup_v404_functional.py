@@ -1,10 +1,10 @@
 import csv
 import json
 import re
-import time
 from datetime import datetime
 from pathlib import Path
 
+from framework.test_data import make_unique_test_email
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 from playwright.sync_api import sync_playwright
 
@@ -932,7 +932,7 @@ def check_positive_route_submit(page, issues: list[dict], details: dict):
     scroll_global_routes_into_view(page)
     click_first_route_cta(page)
 
-    email = f"ui.worldcup.{int(time.time())}@example.com"
+    email = make_unique_test_email("worldcup")
     dialog_ready = page.evaluate(
         """() => {
           const visible = el => {

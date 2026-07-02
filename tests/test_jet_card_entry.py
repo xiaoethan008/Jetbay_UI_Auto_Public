@@ -1,15 +1,13 @@
-from datetime import datetime
-
+from framework.test_data import make_unique_test_email
 from pages.jet_card_page import JetCardPage
 
 
 def test_open_jet_card_from_home(home_page, page):
-    """从首页进入 Jet Card 页面，填写表单并提交。"""
+    """Open Jet Card from home, fill the form, and submit it."""
     jet_card = JetCardPage(page)
     first_name = "Codex"
     last_name = "Tester"
-    # 后台按邮箱判重，这里为每次执行生成唯一邮箱。
-    email = f"codex.jetcard+{datetime.now().strftime('%Y%m%d%H%M%S')}@example.com"
+    email = make_unique_test_email("jetcard")
     phone_number = "1234567890"
     message = "Automated Jet Card subscription submission."
 

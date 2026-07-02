@@ -1,11 +1,11 @@
-from datetime import datetime
+from framework.test_data import make_unique_test_email
 
 
 def test_empty_leg_module_images_and_booking(home_page):
     """检查 Empty Leg 模块图片展示，并完成预订弹窗提交。"""
     first_name = "Codex"
     last_name = "Tester"
-    email = f"codex.emptyleg+{datetime.now().strftime('%Y%m%d%H%M%S')}@example.com"
+    email = make_unique_test_email("emptyleg")
     phone_number = "1234567890"
     message = "Automated Empty Leg booking submission."
 

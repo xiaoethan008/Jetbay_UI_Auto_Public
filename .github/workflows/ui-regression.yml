@@ -15,6 +15,7 @@ jobs:
       JETBAY_TEST_BASE_URL: ${{ secrets.JETBAY_TEST_BASE_URL }}
       JETBAY_TEST_LOGIN_EMAIL: ${{ secrets.JETBAY_TEST_LOGIN_EMAIL }}
       JETBAY_TEST_LOGIN_PASSWORD: ${{ secrets.JETBAY_TEST_LOGIN_PASSWORD }}
+      JETBAY_TEST_FORM_EMAIL: ${{ secrets.JETBAY_TEST_FORM_EMAIL }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
