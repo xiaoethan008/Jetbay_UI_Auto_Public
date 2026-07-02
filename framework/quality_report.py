@@ -45,8 +45,18 @@ def _relative_link(target: str | Path, base_dir: Path) -> str:
 
 def _module_from_nodeid(nodeid: str) -> str:
     """根据测试文件名给报告补充业务模块，后续也可以改为读取 pytest marker。"""
+    lowered = nodeid.lower()
+    v411_rules = [
+        ("test_v411_policy_cookie_brand_and_canonical", "Policy / Cookie"),
+        ("test_v411_empty_leg_locale_core_sections", "Empty Leg"),
+        ("test_v411_empty_leg_bottom_sections", "Empty Leg"),
+        ("test_v411_empty_leg_global_internal_ctas", "Empty Leg"),
+    ]
+    for keyword, module in v411_rules:
+        if keyword in lowered:
+            return module
+
     rules = [
-        ("test_v411_requirements_regression", "V4.1.1 / Requirements"),
         ("test_sos_recommendation_api", "SOS / 推荐逻辑"),
         ("test_error_page_detection", "Error Page Guard"),
         ("test_contact_us", "Contact Us"),
@@ -76,7 +86,6 @@ def _module_from_nodeid(nodeid: str) -> str:
         ("test_submit_proposal", "Search / Proposal"),
         ("test_search_same_city", "Search / Validation"),
     ]
-    lowered = nodeid.lower()
     for keyword, module in rules:
         if keyword in lowered:
             return module
@@ -500,9 +509,17 @@ class QualityReportPlugin:
     body {{ font-family: Arial, "Microsoft YaHei", sans-serif; margin: 24px; color: #172026; background: #f7faf9; }}
     h1, h2 {{ margin: 18px 0 10px; }}
     .meta {{ color: #60717c; margin-bottom: 18px; }}
-    .cards {{ display: grid; grid-template-columns: repeat(6, minmax(120px, 1fr)); gap: 12px; margin: 16px 0 24px; }}
+    .summary-grid {{ display: grid; grid-template-columns: minmax(0, 1fr) 260px; gap: 16px; margin: 16px 0 24px; align-items: stretch; }}
+    .cards {{ display: grid; grid-template-columns: repeat(3, minmax(120px, 1fr)); gap: 12px; margin: 0; }}
     .card {{ background: white; border: 1px solid #dce8e6; border-radius: 8px; padding: 14px; }}
     .card .num {{ font-size: 26px; font-weight: 700; }}
+    .donut-card {{ background: white; border: 1px solid #dce8e6; border-radius: 8px; padding: 16px; display: flex; flex-direction: column; align-items: center; justify-content: center; }}
+    .donut {{ --pass-rate: 0; width: 152px; height: 152px; border-radius: 50%; background: conic-gradient(#31c85a calc(var(--pass-rate) * 1%), #e84b4b 0); position: relative; }}
+    .donut::after {{ content: ""; position: absolute; inset: 16px; border-radius: 50%; background: white; }}
+    .donut-label {{ position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; flex-direction: column; z-index: 1; font-weight: 700; color: #4c5b66; }}
+    .donut-label .rate {{ font-size: 28px; }}
+    .donut-label .caption {{ font-size: 12px; color: #7a8a95; font-weight: 500; }}
+    @media (max-width: 900px) {{ .summary-grid {{ grid-template-columns: 1fr; }} .cards {{ grid-template-columns: repeat(2, minmax(120px, 1fr)); }} }}
     .pass {{ color: #168b75; }}
     .fail {{ color: #c0392b; }}
     .skip {{ color: #9a6a00; }}
@@ -526,7 +543,7 @@ class QualityReportPlugin:
   <div class="links">
     {link(csv_path, "CSV 明细")} {link(xlsx_path, "Excel 报告")} {link(json_path, "JSON 原始数据")}
   </div>
-  {self._render_summary_cards(summary)}
+  {self._render_summary_overview(summary)}
   {self._render_module_table(summary)}
   {self._render_case_table("失败用例", failed_rows, path.parent)}
   {self._render_case_table("跳过用例", skipped_rows, path.parent)}
@@ -537,7 +554,7 @@ class QualityReportPlugin:
 """
         path.write_text(html_text, encoding="utf-8")
 
-    def _render_summary_cards(self, summary: dict) -> str:
+    def _render_summary_overview(self, summary: dict) -> str:
         issue = summary["issue_list"]
         cards = [
             ("总用例", summary["total"], ""),
@@ -547,10 +564,20 @@ class QualityReportPlugin:
             ("通过率", f'{summary["pass_rate"]}%', "pass" if summary["failed"] == 0 else "fail"),
             ("未修复问题", issue["unfixed"], "fail" if issue["unfixed"] else "pass"),
         ]
-        return '<div class="cards">' + "".join(
+        cards_html = '<div class="cards">' + "".join(
             f'<div class="card"><div>{html.escape(label)}</div><div class="num {css}">{value}</div></div>'
             for label, value, css in cards
         ) + "</div>"
+        pass_rate = max(0, min(float(summary["pass_rate"]), 100))
+        donut_html = (
+            '<div class="donut-card">'
+            f'<div class="donut" style="--pass-rate: {pass_rate}">'
+            f'<div class="donut-label"><div class="rate">{summary["pass_rate"]}%</div>'
+            '<div class="caption">通过率</div></div>'
+            '</div>'
+            '</div>'
+        )
+        return f'<div class="summary-grid">{cards_html}{donut_html}</div>'
 
     def _render_module_table(self, summary: dict) -> str:
         rows = []
