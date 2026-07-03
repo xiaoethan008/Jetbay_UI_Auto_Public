@@ -3,6 +3,13 @@ import pytest
 from locators.home_page_locators import HomePageLocators
 
 
+def test_search_requires_origin_and_destination(home_page):
+    home_page.click_search()
+
+    assert home_page.get_required_location_error_count() >= 2
+    assert not home_page.is_on_path(HomePageLocators.SEARCH_RESULTS_PATH)
+
+
 @pytest.mark.parametrize(
     ("case_name", "invalid_origin"),
     [
