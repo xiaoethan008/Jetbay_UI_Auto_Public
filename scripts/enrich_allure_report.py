@@ -221,6 +221,21 @@ def build_summary_html(data, source_path: Path):
         + "</table>"
     )
     module_table_json = json.dumps(module_table_html, ensure_ascii=False)
+    overview_widget_html = (
+        '<div class="jb-overview-inner">'
+        '<div class="jb-overview-copy">'
+        '<h3>JETBAY UI Automation Report</h3>'
+        f'<div class="jb-overview-time">{html.escape(str(summary.get("started_at", "")))} - '
+        f'{html.escape(str(summary.get("finished_at", "")))}</div>'
+        f'<div class="jb-overview-total"><strong>{html.escape(str(summary.get("total", 0)))}</strong>'
+        '<span>test cases</span></div>'
+        '</div>'
+        f'<div class="jb-donut" style="--jb-pass-rate: {html.escape(str(pass_rate))}">'
+        f'<div class="jb-donut-label"><strong>{html.escape(str(pass_rate))}%</strong></div>'
+        '</div>'
+        '</div>'
+    )
+    overview_widget_json = json.dumps(overview_widget_html, ensure_ascii=False)
 
     attention_tests = [case for case in tests if case.get("outcome") in {"failed", "skipped"}]
     category_counts = Counter(
@@ -437,6 +452,77 @@ def build_summary_html(data, source_path: Path):
     box-sizing: border-box;
     padding: 15px;
   }}
+  .jb-overview-widget {{
+    background: #fff;
+    border: 1px solid #ddd;
+    box-sizing: border-box;
+    padding: 15px 18px;
+  }}
+  .jb-overview-inner {{
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 188px;
+    align-items: center;
+    gap: 18px;
+    min-height: 186px;
+  }}
+  .jb-overview-copy h3 {{
+    margin: 0 0 8px;
+    font-size: 16px;
+    line-height: 1.25;
+    font-weight: 700;
+    color: #172026;
+    text-transform: none;
+  }}
+  .jb-overview-time {{
+    color: #172026;
+    font-size: 13px;
+    font-weight: 600;
+    margin-bottom: 24px;
+  }}
+  .jb-overview-total {{
+    color: #6c7a86;
+    text-align: center;
+  }}
+  .jb-overview-total strong {{
+    display: block;
+    color: #172026;
+    font-size: 42px;
+    line-height: 1;
+    font-weight: 400;
+  }}
+  .jb-overview-total span {{
+    display: block;
+    margin-top: 4px;
+    font-size: 13px;
+  }}
+  .jb-donut {{
+    width: 152px;
+    height: 152px;
+    border-radius: 50%;
+    background: conic-gradient(#31c85a calc(var(--jb-pass-rate) * 1%), #e84b4b 0);
+    position: relative;
+    margin: 0 auto;
+  }}
+  .jb-donut::after {{
+    content: "";
+    position: absolute;
+    inset: 16px;
+    border-radius: 50%;
+    background: #fff;
+  }}
+  .jb-donut-label {{
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1;
+    color: #4c5b66;
+  }}
+  .jb-donut-label strong {{
+    font-size: 28px;
+    line-height: 1;
+  }}
   .jb-side-widget {{
     background: #fff;
     border: 1px solid #ddd;
@@ -538,6 +624,16 @@ def build_summary_html(data, source_path: Path):
       widget.innerHTML = html;
       grid.appendChild(widget);
     }}
+    function ensureOverviewWidget() {{
+      var grid = document.querySelector("#content .widgets-grid");
+      if (!grid || document.querySelector(".jb-overview-widget")) {{
+        return;
+      }}
+      var widget = document.createElement("div");
+      widget.className = "widget jb-overview-widget";
+      widget.innerHTML = {overview_widget_json};
+      grid.appendChild(widget);
+    }}
     function ensureModuleOverviewWidget() {{
       var grid = document.querySelector("#content .widgets-grid");
       if (!grid || document.querySelector(".jb-module-widget")) {{
@@ -551,6 +647,19 @@ def build_summary_html(data, source_path: Path):
     function ensureSupplementWidgets() {{
       ensureSideWidget("jb-category-widget", {category_table_json});
       ensureSideWidget("jb-attention-widget", {attention_table_json});
+    }}
+    function positionOverviewWidget() {{
+      var grid = document.querySelector("#content .widgets-grid");
+      var overviewWidget = document.querySelector(".jb-overview-widget");
+      if (!grid || !overviewWidget) {{
+        return;
+      }}
+      var gap = 15;
+      var width = Math.max(360, Math.floor(grid.clientWidth * 0.5) - gap * 2);
+      overviewWidget.style.position = "absolute";
+      overviewWidget.style.left = gap + "px";
+      overviewWidget.style.top = "0px";
+      overviewWidget.style.width = width + "px";
     }}
     function positionModuleOverviewWidget() {{
       var grid = document.querySelector("#content .widgets-grid");
@@ -569,6 +678,7 @@ def build_summary_html(data, source_path: Path):
     }}
     function positionSupplementWidgets() {{
       var grid = document.querySelector("#content .widgets-grid");
+      var overviewWidget = document.querySelector(".jb-overview-widget");
       var moduleWidget = document.querySelector(".jb-module-widget");
       var categoryWidget = document.querySelector(".jb-category-widget");
       var attentionWidget = document.querySelector(".jb-attention-widget");
@@ -584,10 +694,10 @@ def build_summary_html(data, source_path: Path):
         widget.style.width = width + "px";
       }});
 
-      // Allure 原生总览圆环不总是在 widgets-grid 里，给左侧先预留一块安全高度。
-      var nativeLeftBottom = 215;
+      var nativeLeftBottom = overviewWidget ? overviewWidget.offsetTop + overviewWidget.offsetHeight : 215;
       Array.prototype.slice.call(grid.querySelectorAll(":scope > .widget")).forEach(function (widget) {{
         if (
+          widget.classList.contains("jb-overview-widget") ||
           widget.classList.contains("jb-module-widget") ||
           widget.classList.contains("jb-side-widget") ||
           window.getComputedStyle(widget).display === "none"
@@ -612,8 +722,10 @@ def build_summary_html(data, source_path: Path):
     function refreshJetbayReportLayout() {{
       syncJetbaySummaryHeight();
       hideLowValueAllureWidgets();
+      ensureOverviewWidget();
       ensureModuleOverviewWidget();
       ensureSupplementWidgets();
+      positionOverviewWidget();
       positionModuleOverviewWidget();
       positionSupplementWidgets();
     }}
