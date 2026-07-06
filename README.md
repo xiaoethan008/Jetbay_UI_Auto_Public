@@ -135,6 +135,8 @@ set QA_REPORT_VERSION=V4.1.1
 pytest -v
 ```
 
+When a new website test version starts, update `QA_REPORT_VERSION` and the default report version to the latest test version before running local or GitHub regression reports.
+
 If a matching issue list exists at `artifacts/问题清单/官网回归问题清单_<version>.csv`, the quality report will merge its fixed/unfixed status into the summary.
 
 The GitHub Actions workflow also injects this quality data into the top of `allure-report/index.html` before uploading and deploying the Allure report. The WeCom screenshot therefore still captures Allure, but the first screen becomes a management summary with pass rate, failed/skipped counts, open issue count, top failed cases, and open issues.
