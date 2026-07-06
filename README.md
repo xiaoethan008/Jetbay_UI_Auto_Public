@@ -128,10 +128,10 @@ The report set includes:
 - `官网回归质量报告_<version>.csv`: test case execution details.
 - `quality_results.json`: raw data for follow-up automation.
 
-The report version defaults to `V4.0.3` and can be overridden:
+The report version defaults to `V4.1.1` and can be overridden:
 
 ```sh
-set QA_REPORT_VERSION=V4.0.3
+set QA_REPORT_VERSION=V4.1.1
 pytest -v
 ```
 

@@ -1,6 +1,7 @@
 import argparse
 import asyncio
 import csv
+import os
 import re
 import sys
 from collections import defaultdict
@@ -380,7 +381,7 @@ def write_markdown(path: Path, issue_rows: list[dict], summary: dict):
 async def main():
     parser = argparse.ArgumentParser(description="Check rich-text heading font-size and line-height on content detail pages.")
     parser.add_argument("--base-url", default=get_current_environment()["base_url"], help="Base URL to scan.")
-    parser.add_argument("--version", default="V4.0.3", help="Issue list version.")
+    parser.add_argument("--version", default=os.getenv("QA_REPORT_VERSION", "V4.1.1"), help="Issue list version.")
     parser.add_argument("--status-concurrency", type=int, default=20)
     parser.add_argument("--page-concurrency", type=int, default=6)
     args = parser.parse_args()

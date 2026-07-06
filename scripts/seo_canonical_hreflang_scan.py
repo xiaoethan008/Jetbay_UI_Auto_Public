@@ -1,5 +1,6 @@
 import argparse
 import csv
+import os
 import re
 import sys
 from dataclasses import dataclass
@@ -644,7 +645,7 @@ def main():
     parser = argparse.ArgumentParser(description="Scan canonical, indexing, hreflang, and deprecated-page redirects.")
     parser.add_argument("--base-url", default=get_current_environment()["base_url"], help="Site base URL.")
     parser.add_argument("--output-dir", default=None, help="Output directory.")
-    parser.add_argument("--version", default="V4.0.3", help="Issue list version suffix.")
+    parser.add_argument("--version", default=os.getenv("QA_REPORT_VERSION", "V4.1.1"), help="Issue list version suffix.")
     args = parser.parse_args()
 
     base_url = clean_base_url(args.base_url)

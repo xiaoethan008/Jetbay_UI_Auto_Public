@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 
-DEFAULT_REPORT_VERSION = "V4.0.3"
+DEFAULT_REPORT_VERSION = "V4.1.1"
 FIXED_FIELD = "是否已修复"
 RECHECK_FIELD = "复测结果"
 
