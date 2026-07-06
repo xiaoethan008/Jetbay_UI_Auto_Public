@@ -1,5 +1,4 @@
-import re
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
 
 import pytest
 
@@ -14,24 +13,7 @@ LEGACY_EMPTY_LEG_RECOMMENDATION_PATHS = (
     "/global/empty-leg-recommendation",
 )
 
-
-def _robots_tokens(contents: list[str]) -> set[str]:
-    return {
-        token.strip().lower()
-        for content in contents
-        for token in re.split(r"[,;]", content or "")
-        if token.strip()
-    }
-
-
-def _get_rendered_robots(page) -> list[str]:
-    # V4.1.1 only treats the browser-rendered DOM and response header as the
-    # regression oracle. Raw SSR HTML can still contain stale metadata on dev.
-    page.wait_for_timeout(2500)
-    return page.eval_on_selector_all(
-        'meta[name="robots"]',
-        "(elements) => elements.map((element) => element.content || '')",
-    )
+EMPTY_LEG_CANONICAL_PATHS = {"/empty-leg", "/en-us/empty-leg"}
 
 
 PLAN_YOUR_FLIGHT_CASES = [
@@ -77,7 +59,7 @@ def test_plan_your_flight_menu_pages(home_page, page, menu_text, href_keyword, p
 
 @pytest.mark.allow_error_page
 def test_empty_leg_recommendation_removed_from_plan_your_flight(home_page, page):
-    """Empty Leg Recommendation 已按 V4.1.1 下线，不再作为正向菜单页回归。"""
+    """Empty Leg Recommendation 已迁移到 Empty Leg 页面，不再作为正向菜单页回归。"""
     current_env = get_current_environment()
     base_url = current_env["base_url"].rstrip("/")
     home_page.open()
@@ -92,18 +74,17 @@ def test_empty_leg_recommendation_removed_from_plan_your_flight(home_page, page)
         legacy_url = urljoin(base_url + "/", legacy_path.lstrip("/"))
         response = page.goto(legacy_url, wait_until="domcontentloaded")
         assert response is not None
-        assert response.status == 404
+        assert response.status == 200
 
-        header_robots = response.headers.get("x-robots-tag", "")
-        header_tokens = _robots_tokens([header_robots])
-        assert {"noindex", "nofollow"}.issubset(header_tokens), (
-            "Legacy Empty Leg Recommendation URL must return noindex/nofollow "
-            f"X-Robots-Tag: {legacy_url}, headers={response.headers}"
+        final_path = urlparse(page.url).path.rstrip("/") or "/"
+        assert final_path in EMPTY_LEG_CANONICAL_PATHS, (
+            "Legacy Empty Leg Recommendation URL should resolve to the Empty Leg page, "
+            f"got {page.url} from {legacy_url}"
         )
 
-        rendered_robots = _get_rendered_robots(page)
-        rendered_tokens = _robots_tokens(rendered_robots)
-        assert "noindex" in rendered_tokens and "index" not in rendered_tokens, (
-            "Legacy Empty Leg Recommendation URL must not expose indexable "
-            f"robots metadata in rendered DOM: {legacy_url}, robots={rendered_robots}"
+        page_text = page.locator("body").inner_text(timeout=15000)
+        assert "Empty Leg" in page_text
+        assert "empty-leg-recommendation" not in final_path, (
+            "Legacy Empty Leg Recommendation path should not remain as the final URL, "
+            f"got {page.url}"
         )

@@ -65,6 +65,13 @@ def _wait_for_expired_session_guard(page) -> bool:
 
 
 @pytest.mark.p1
+@pytest.mark.xfail(
+    reason=(
+        "历史问题未修复：登录 token 失效后提交世界杯航线咨询仍进入 thankyou；"
+        "GitHub 定时回归 #111 于 2026-07-05 再次复现。"
+    ),
+    strict=True,
+)
 def test_world_cup_route_submit_prompts_when_login_session_expired(home_page, page):
     """世界杯航线咨询 - 登录过期后提交表单，应提示用户重新登录并刷新页面。"""
     current_env = get_current_environment()

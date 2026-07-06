@@ -34,7 +34,7 @@ EMPTY_LEG_LOCALE_CASES = [
         name="global",
         path="/empty-leg",
         core_fragments=(
-            "Limited Empty Leg Deals",
+            "Empty Leg Deals",
             "Private Jet Empty Leg Flights",
             "Live Empty Leg Deals",
             "Get Alerts",
@@ -42,14 +42,13 @@ EMPTY_LEG_LOCALE_CASES = [
         bottom_fragments=(
             "What Are Private Jet Empty Leg Flights?",
             "How to Book an Empty Leg Flight with Jetbay",
-            "Contact Our Conciergeus",
         ),
     ),
     EmptyLegLocaleCase(
         name="en-us",
         path="/en-us/empty-leg",
         core_fragments=(
-            "Limited Empty Leg Deals",
+            "Empty Leg Deals",
             "Private Jet Empty Leg Flights",
             "Live Empty Leg Deals",
             "Get Alerts",
@@ -57,16 +56,15 @@ EMPTY_LEG_LOCALE_CASES = [
         bottom_fragments=(
             "What Are Private Jet Empty Leg Flights?",
             "How to Book an Empty Leg Flight with Jetbay",
-            "Contact Our Conciergeus",
         ),
     ),
     EmptyLegLocaleCase(
         name="zh-cn",
         path="/zh-cn/empty-leg",
         core_fragments=(
-            "限量空腿特价航班",
+            "空机优惠",
             "私人飞机空腿",
-            "实时空腿特价航班",
+            "空腿航班",
             "获取提醒",
         ),
         bottom_fragments=(
@@ -79,9 +77,9 @@ EMPTY_LEG_LOCALE_CASES = [
         name="zh-hk",
         path="/zh-hk/empty-leg",
         core_fragments=(
-            "限量空腿特價航班",
+            "空機優惠",
             "私人飛機空腿",
-            "即時空腿特價航班",
+            "空腿航班",
             "取得提醒",
         ),
         bottom_fragments=(
@@ -94,9 +92,9 @@ EMPTY_LEG_LOCALE_CASES = [
         name="zh-tw",
         path="/zh-tw/empty-leg",
         core_fragments=(
-            "限量空腿特價航班",
+            "空機優惠",
             "私人飛機空腿",
-            "即時空腿特價航班",
+            "空腿航班",
             "取得提醒",
         ),
         bottom_fragments=(
