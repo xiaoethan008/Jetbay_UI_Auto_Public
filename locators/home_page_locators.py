@@ -4,8 +4,8 @@ class HomePageLocators:
     URL = "https://dev.jet-bay.com"
 
     ONE_WAY_TRIP_TEXT = "One Way"
-    ROUND_TRIP_TEXT = "Round-Trip"
-    MULTI_CITY_TRIP_TEXT = "Multi-City"
+    ROUND_TRIP_TEXT = "Round-trip"
+    MULTI_CITY_TRIP_TEXT = "Multi-city"
 
     COMBOBOX_INPUTS = "input[role='combobox'][aria-autocomplete='list']:visible"
     ORIGIN_INPUT_INDEX = 0
