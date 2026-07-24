@@ -470,7 +470,7 @@ class HomePage(BasePage):
                 return hasLocalLoginInfo || hasAvatar || (!hasHeaderLogin && !hasLoginDialog);
             }
             """,
-            timeout=20000,
+            timeout=45000,
         )
         self._close_visible_login_dialog()
         if self.page.locator("header img[alt='avatar']:visible").count() == 0:

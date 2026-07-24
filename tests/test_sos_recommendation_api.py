@@ -71,19 +71,36 @@ def _city_id(context, city: str, country_code: str) -> str:
     return str(city_id)
 
 
+def _earliest_departure_date(context, city_id: str) -> str:
+    body = _response_json(
+        context.post(
+            f"{API_BASE_URL}/web/time/earliestDepartureDate",
+            data={"cityId": city_id},
+            timeout=60_000,
+        ),
+        action=f"earliestDepartureDate {city_id}",
+    )
+    assert body.get("code") == 1000, f"earliestDepartureDate should return code=1000, body={body}"
+    earliest_date = (body.get("data") or {}).get("earliestSelectableDate")
+    assert earliest_date, f"earliestDepartureDate should return earliestSelectableDate, body={body}"
+    return str(earliest_date)
+
+
 def _search_payload(context, route: tuple[str, str, str, str, str], *, order_type: int, trip_type: int = 1) -> dict:
     _, dep_city, dep_country, arr_city, arr_country = route
+    dep_city_id = _city_id(context, dep_city, dep_country)
+    departure_date = _earliest_departure_date(context, dep_city_id)
     trip = {
         "arrAirport": "",
         "arrCity": _city_id(context, arr_city, arr_country),
         "depAirport": "",
-        "depCity": _city_id(context, dep_city, dep_country),
-        "depTime": date.today().isoformat(),
+        "depCity": dep_city_id,
+        "depTime": departure_date,
         "pax": 2,
         "returnTime": "",
     }
     if trip_type == 2:
-        trip["returnTime"] = (date.today() + timedelta(days=1)).isoformat()
+        trip["returnTime"] = (date.fromisoformat(departure_date) + timedelta(days=1)).isoformat()
 
     return {
         "currencyType": "USD",
