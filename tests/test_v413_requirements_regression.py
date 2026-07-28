@@ -17,11 +17,6 @@ EXPIRED_DATE = "2020-01-01"
 def dev_only_v413_regression():
     if get_current_environment_name() == "prod":
         pytest.skip("V4.1.3 lead/date regression does not submit forms in production.")
-    if os.getenv("QA_REPORT_VERSION", "").strip().upper() == "V4.1.4":
-        pytest.skip(
-            "V4.1.3 and V4.1.4 are parallel releases; V4.1.3-specific "
-            "requirements are not inherited by the V4.1.4 test target."
-        )
 
 
 @pytest.fixture(scope="session")
@@ -257,7 +252,7 @@ def test_v413_fixed_price_expired_submit_has_one_closable_modal_and_client_time_
 @pytest.mark.p1
 @pytest.mark.xfail(
     strict=True,
-    reason="BUG-V413-009: dev English title/body do not match the latest requirement copy.",
+    reason="BUG-V413-009: test English title/body do not match the latest requirement copy.",
 )
 def test_v413_departure_date_expired_english_copy_matches_latest_requirement(page):
     _, visible = _submit_fixed_price_with_expired_date(page)

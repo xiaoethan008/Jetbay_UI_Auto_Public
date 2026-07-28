@@ -13,7 +13,7 @@ jobs:
       HEADLESS: "true"
       TEST_ENV: test
       QA_REPORT_VERSION: V4.1.4
-      JETBAY_TEST_BASE_URL: ${{ secrets.JETBAY_TEST_BASE_URL }}
+      JETBAY_TEST_BASE_URL: https://test.jet-bay.com/
       JETBAY_TEST_LOGIN_EMAIL: ${{ secrets.JETBAY_TEST_LOGIN_EMAIL }}
       JETBAY_TEST_LOGIN_PASSWORD: ${{ secrets.JETBAY_TEST_LOGIN_PASSWORD }}
       JETBAY_TEST_FORM_EMAIL: ${{ secrets.JETBAY_TEST_FORM_EMAIL }}
@@ -39,6 +39,9 @@ jobs:
 
       - name: Install Playwright browser
         run: python -m playwright install --with-deps chromium
+
+      - name: Verify test environment target
+        run: python scripts/verify_ci_test_environment.py --write-github-summary
 
       - name: Run regression suite
         run: python -m pytest -v -s --alluredir=allure-results
