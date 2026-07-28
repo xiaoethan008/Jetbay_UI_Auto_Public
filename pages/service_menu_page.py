@@ -1,5 +1,11 @@
 from urllib.parse import urljoin, urlparse
 
+from framework.browser_utils import (
+    scroll_page_for_lazy_content,
+    wait_for_image_loaded,
+    wait_for_render_frames,
+)
+from framework.network_checker import check_urls
 from locators.service_menu_page_locators import ServiceMenuPageLocators
 from pages.base_page import BasePage
 
@@ -15,12 +21,7 @@ class ServiceMenuPage(BasePage):
 
     def load_all_content(self):
         """通过滚动触发页面懒加载。"""
-        self.page.wait_for_load_state("domcontentloaded")
-        for _ in range(6):
-            self.page.mouse.wheel(0, 1400)
-            self.page.wait_for_timeout(500)
-        self.page.mouse.wheel(0, -10000)
-        self.page.wait_for_timeout(1000)
+        scroll_page_for_lazy_content(self.page)
 
     def _image_resource_loads(self, src: str, cache: dict[str, bool]) -> bool:
         """对疑似坏图做浏览器二次加载复核，避免 lazy/srcset/naturalWidth 误报。"""
@@ -92,45 +93,28 @@ class ServiceMenuPage(BasePage):
                     continue
 
                 image.scroll_into_view_if_needed()
-                self.page.wait_for_timeout(1200)
-
-                image_state = {
-                    "complete": False,
-                    "naturalWidth": 0,
-                    "naturalHeight": 0,
-                    "currentSrc": "",
-                    "src": "",
-                    "visible": False,
-                }
-                for _ in range(5):
-                    image_state = image.evaluate(
-                        """
-                        (el) => ({
-                            complete: el.complete,
-                            naturalWidth: el.naturalWidth,
-                            naturalHeight: el.naturalHeight,
-                            currentSrc: el.currentSrc || '',
-                            src: el.src || el.getAttribute('src') || '',
-                            visible: (() => {
-                                const rect = el.getBoundingClientRect();
-                                const style = window.getComputedStyle(el);
-                                return rect.width > 1
-                                    && rect.height > 1
-                                    && style.display !== 'none'
-                                    && style.visibility !== 'hidden'
-                                    && Number(style.opacity || '1') > 0.05;
-                            })(),
-                        })
-                        """
-                    )
-                    if (
-                        image_state["complete"]
-                        and image_state["naturalWidth"] > 0
-                        and image_state["naturalHeight"] > 0
-                        and image_state["currentSrc"]
-                    ):
-                        break
-                    self.page.wait_for_timeout(1000)
+                wait_for_render_frames(self.page)
+                wait_for_image_loaded(image, timeout=5000)
+                image_state = image.evaluate(
+                    """
+                    (el) => ({
+                        complete: el.complete,
+                        naturalWidth: el.naturalWidth,
+                        naturalHeight: el.naturalHeight,
+                        currentSrc: el.currentSrc || '',
+                        src: el.src || el.getAttribute('src') || '',
+                        visible: (() => {
+                            const rect = el.getBoundingClientRect();
+                            const style = window.getComputedStyle(el);
+                            return rect.width > 1
+                                && rect.height > 1
+                                && style.display !== 'none'
+                                && style.visibility !== 'hidden'
+                                && Number(style.opacity || '1') > 0.05;
+                        })(),
+                    })
+                    """
+                )
 
                 src = image_state.get("currentSrc") or image_state.get("src") or ""
                 if not image_state.get("visible", False):
@@ -199,7 +183,7 @@ class ServiceMenuPage(BasePage):
                 button.evaluate(
                     "(el) => el.scrollIntoView({ block: 'center', inline: 'center' })"
                 )
-                self.page.wait_for_timeout(300)
+                wait_for_render_frames(self.page)
                 button.click(trial=True, timeout=5000)
             except Exception as exc:
                 unclickable_buttons.append(
@@ -237,20 +221,10 @@ class ServiceMenuPage(BasePage):
         return unique_links
 
     def get_inaccessible_links(self) -> list[dict]:
-        inaccessible_links = []
-
-        for href in self.get_unique_page_links():
-            target_url = urljoin(self.page.url, href)
-            try:
-                response = self.page.request.get(
-                    target_url, timeout=10000, fail_on_status_code=False
-                )
-                if response.status >= 400:
-                    inaccessible_links.append({"href": target_url, "status": response.status})
-            except Exception as exc:
-                inaccessible_links.append({"href": target_url, "status": str(exc)})
-
-        return inaccessible_links
+        target_urls = [
+            urljoin(self.page.url, href) for href in self.get_unique_page_links()
+        ]
+        return check_urls(self.page.request, target_urls)
 
     def _normalize_site_path(self, value: str) -> str:
         path = urlparse(value).path.rstrip("/") or "/"
@@ -315,7 +289,6 @@ class ServiceMenuPage(BasePage):
         target_url = urljoin(self.page.url, href)
         self.goto(target_url)
         self.page.wait_for_load_state("domcontentloaded")
-        self.page.wait_for_timeout(2000)
 
     def click_all_view_more(self, max_clicks: int = 5) -> int:
         """点击页面中的 View More，直到按钮消失或达到上限。"""
@@ -331,9 +304,10 @@ class ServiceMenuPage(BasePage):
             if not view_more.is_visible():
                 break
             view_more.scroll_into_view_if_needed()
-            self.page.wait_for_timeout(300)
+            wait_for_render_frames(self.page)
             view_more.click(force=True)
             click_count += 1
+            # View More 没有稳定响应接口或加载完成标记；保留短等待供动态内容提交渲染。
             self.page.wait_for_timeout(2000)
 
         return click_count
@@ -354,13 +328,17 @@ class ServiceMenuPage(BasePage):
             if cards.count() > 0:
                 card = cards.first
                 card.scroll_into_view_if_needed()
-                self.page.wait_for_timeout(300)
+                wait_for_render_frames(self.page)
+                previous_url = self.page.url
                 try:
                     card.click(force=True)
                 except Exception:
                     card.evaluate("(el) => el.click()")
-                self.page.wait_for_load_state("domcontentloaded")
-                self.page.wait_for_timeout(2000)
+                self.page.wait_for_url(
+                    lambda url: url != previous_url,
+                    wait_until="domcontentloaded",
+                    timeout=10000,
+                )
                 return True
 
         return False
@@ -375,12 +353,13 @@ class ServiceMenuPage(BasePage):
             return False
 
         video_cards.first.scroll_into_view_if_needed()
-        self.page.wait_for_timeout(300)
+        wait_for_render_frames(self.page)
         video_cards.first.click(force=True)
-        self.page.wait_for_timeout(2500)
 
         dialog = self.page.locator("[role='dialog']")
         iframe = self.page.locator("iframe[src*='youtube.com/embed']")
+        dialog.first.wait_for(state="visible", timeout=10000)
+        iframe.first.wait_for(state="attached", timeout=10000)
         return (
             dialog.count() > 0
             and dialog.first.is_visible()

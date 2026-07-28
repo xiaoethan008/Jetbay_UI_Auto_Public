@@ -79,7 +79,7 @@ def load_excel_rows(path: Path) -> list[dict]:
             first_sheet.attrib[
                 "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}id"
             ]
-        ]
+        ].lstrip("/")
         if not sheet_target.startswith("xl/"):
             sheet_target = f"xl/{sheet_target}"
 

@@ -30,8 +30,6 @@ def _open_contact_us_dialog(page, base_url: str, path: str, viewport_size: dict)
         page.wait_for_load_state("load", timeout=45000)
     except Exception:
         pass
-    page.wait_for_timeout(1500)
-
     # 页面里可能存在桌面/移动两套同名按钮，取当前可见的第一个入口即可。
     contact_button = page.get_by_role(
         "button", name=re.compile(r"Contact Us|联系我们|聯繫我們")
@@ -74,7 +72,7 @@ def test_contact_us_modal_opens_on_key_pages(page):
                 )
 
             page.keyboard.press("Escape")
-            page.wait_for_timeout(300)
+            dialog.wait_for(state="hidden", timeout=5000)
 
     assert failures == [], f"Contact Us modal content is incomplete: {failures}"
 
@@ -101,6 +99,6 @@ def test_contact_us_modal_does_not_show_retired_phone_number(page):
                 )
 
             page.keyboard.press("Escape")
-            page.wait_for_timeout(300)
+            dialog.wait_for(state="hidden", timeout=5000)
 
     assert violations == [], f"Retired Contact Us phone number is still visible: {violations}"

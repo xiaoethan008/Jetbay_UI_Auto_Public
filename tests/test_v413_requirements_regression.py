@@ -17,6 +17,11 @@ EXPIRED_DATE = "2020-01-01"
 def dev_only_v413_regression():
     if get_current_environment_name() == "prod":
         pytest.skip("V4.1.3 lead/date regression does not submit forms in production.")
+    if os.getenv("QA_REPORT_VERSION", "").strip().upper() == "V4.1.4":
+        pytest.skip(
+            "V4.1.3 and V4.1.4 are parallel releases; V4.1.3-specific "
+            "requirements are not inherited by the V4.1.4 test target."
+        )
 
 
 @pytest.fixture(scope="session")
@@ -174,7 +179,9 @@ def _submit_fixed_price_with_expired_date(page, locale: str = "") -> tuple[dict,
         wait_until="domcontentloaded",
         timeout=90_000,
     )
-    page.wait_for_timeout(2500)
+    page.locator("button:visible").filter(has_text="Book Now").first.wait_for(
+        state="visible", timeout=15_000
+    )
 
     capture: dict = {}
 
@@ -207,19 +214,24 @@ def _submit_fixed_price_with_expired_date(page, locale: str = "") -> tuple[dict,
         if not checkbox.is_checked():
             checkbox.check(force=True)
     submit_button = dialog.get_by_role("button", name="Submit", exact=True)
-    page.wait_for_timeout(800)
     submit_button.wait_for(state="visible")
-    assert submit_button.is_enabled(), "Fixed Price Submit should be enabled after valid fields are filled"
-    submit_button.click()
-    for _ in range(20):
-        if capture.get("response"):
-            break
-        page.wait_for_timeout(500)
+    page.wait_for_function(
+        "(button) => button && !button.disabled && button.getAttribute('aria-disabled') !== 'true'",
+        arg=submit_button.element_handle(),
+        timeout=5000,
+    )
+    with page.expect_response(
+        lambda response: "/lead/" in response.url
+        and response.request.method == "POST",
+        timeout=30_000,
+    ):
+        submit_button.click()
     assert capture.get("response"), "Fixed Price lead request was not observed after Submit"
-    page.wait_for_timeout(500)
 
     modal = page.get_by_text("Departure Date Unavailable", exact=True)
     close_button = page.locator("button").filter(has_text="Select new date")
+    if capture["response"].get("code") == 23103:
+        modal.first.wait_for(state="visible", timeout=10_000)
     return capture, {
         "modal_count": close_button.count(),
         "title": modal.first.inner_text() if modal.count() else "",

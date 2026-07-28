@@ -4,6 +4,7 @@ import pytest
 
 from runtime_environments import get_current_environment
 
+from framework.browser_utils import wait_for_render_frames
 from pages.service_menu_page import ServiceMenuPage
 
 
@@ -66,7 +67,7 @@ def test_empty_leg_recommendation_removed_from_plan_your_flight(home_page, page)
 
     header = page.locator("header").first
     header.get_by_text("Plan Your Flight", exact=True).first.hover()
-    page.wait_for_timeout(600)
+    wait_for_render_frames(page)
 
     assert header.locator("a[href*='empty-leg-recommendation']:visible").count() == 0
 

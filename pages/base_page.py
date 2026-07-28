@@ -164,6 +164,7 @@ class BasePage:
             except (PlaywrightError, PlaywrightTimeoutError, RuntimeError):
                 if attempt == 1:
                     raise
+                # 导航失败后的退避间隔属于重试策略，不能用页面状态等待替代。
                 self.page.wait_for_timeout(1500)
                 try:
                     self.page.goto("about:blank", wait_until="domcontentloaded", timeout=10000)

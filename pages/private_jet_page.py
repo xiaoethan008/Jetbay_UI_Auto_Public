@@ -1,5 +1,11 @@
 from urllib.parse import urljoin
 
+from framework.browser_utils import (
+    scroll_page_for_lazy_content,
+    wait_for_image_loaded,
+    wait_for_render_frames,
+)
+from framework.network_checker import check_url, check_urls
 from locators.private_jet_page_locators import PrivateJetPageLocators
 from pages.base_page import BasePage
 
@@ -14,12 +20,7 @@ class PrivateJetPage(BasePage):
         return PrivateJetPageLocators.PAGE_TITLE_TEXT in self.page.locator("body").inner_text()
 
     def load_all_content(self):
-        self.page.wait_for_load_state("domcontentloaded")
-        for _ in range(6):
-            self.page.mouse.wheel(0, 1400)
-            self.page.wait_for_timeout(500)
-        self.page.mouse.wheel(0, -10000)
-        self.page.wait_for_timeout(1000)
+        scroll_page_for_lazy_content(self.page)
 
     def _load_popular_jet_carousel_images(self):
         """Scroll the aircraft carousel so lazy images get a chance to load."""
@@ -31,7 +32,7 @@ class PrivateJetPage(BasePage):
 
         section = heading.locator("xpath=ancestor::section[1]").first
         section.scroll_into_view_if_needed()
-        self.page.wait_for_timeout(800)
+        wait_for_render_frames(self.page)
 
         carousel = section.locator(PrivateJetPageLocators.POPULAR_JET_CAROUSEL).first
         if carousel.count() == 0:
@@ -46,7 +47,7 @@ class PrivateJetPage(BasePage):
                 "(el, x) => { el.scrollTo({ left: x, behavior: 'auto' }); }",
                 position,
             )
-            self.page.wait_for_timeout(1200)
+            wait_for_render_frames(self.page)
 
     def _image_state(self, image) -> dict:
         return image.evaluate(
@@ -75,17 +76,13 @@ class PrivateJetPage(BasePage):
             return False
 
         target_url = urljoin(self.page.url, image_url)
-        try:
-            response = self.page.request.get(
-                target_url,
-                timeout=15000,
-                fail_on_status_code=False,
-            )
-        except Exception:
-            return False
-
-        content_type = (response.headers.get("content-type") or "").lower()
-        return response.status < 400 and content_type.startswith("image/")
+        result = check_url(
+            self.page.request,
+            target_url,
+            timeout=15_000,
+            expected_content_type_prefix="image/",
+        )
+        return result.accessible
 
     def get_broken_page_images(self) -> list[dict]:
         broken_images = []
@@ -104,14 +101,9 @@ class PrivateJetPage(BasePage):
                     continue
 
                 image.scroll_into_view_if_needed(timeout=5000)
-                self.page.wait_for_timeout(500)
-
+                wait_for_render_frames(self.page)
+                wait_for_image_loaded(image, timeout=4000)
                 image_state = self._image_state(image)
-                for _ in range(5):
-                    if image_state["complete"] and image_state["naturalWidth"] > 0:
-                        break
-                    self.page.wait_for_timeout(800)
-                    image_state = self._image_state(image)
 
                 if image_state["complete"] and image_state["naturalWidth"] > 0:
                     continue
@@ -157,17 +149,7 @@ class PrivateJetPage(BasePage):
         return unique_links
 
     def get_inaccessible_links(self) -> list[dict]:
-        inaccessible_links = []
-
-        for href in self.get_unique_page_links():
-            target_url = urljoin(self.page.url, href)
-            try:
-                response = self.page.request.get(
-                    target_url, timeout=30000, fail_on_status_code=False
-                )
-                if response.status >= 400:
-                    inaccessible_links.append({"href": target_url, "status": response.status})
-            except Exception as exc:
-                inaccessible_links.append({"href": target_url, "status": str(exc)})
-
-        return inaccessible_links
+        target_urls = [
+            urljoin(self.page.url, href) for href in self.get_unique_page_links()
+        ]
+        return check_urls(self.page.request, target_urls)

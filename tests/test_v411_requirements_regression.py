@@ -5,6 +5,7 @@ from urllib.parse import urljoin, urlparse
 import pytest
 
 from pages.base_page import BasePage
+from framework.browser_utils import scroll_page_for_lazy_content
 from runtime_environments import get_current_environment
 
 
@@ -147,15 +148,12 @@ def _goto(page, path: str):
     target_url = _url_for(path)
     response = page.goto(target_url, wait_until="domcontentloaded", timeout=60000)
     page.locator("body").wait_for(state="visible", timeout=15000)
-    page.wait_for_timeout(2500)
     BasePage(page).assert_not_on_error_page(f"After navigating to {target_url}")
     return target_url, response
 
 
 def _scroll_to_bottom(page):
-    for _ in range(12):
-        page.mouse.wheel(0, 1200)
-        page.wait_for_timeout(250)
+    scroll_page_for_lazy_content(page, steps=12, delta_y=1200)
 
 
 def _canonical_hrefs(page) -> list[str]:

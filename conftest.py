@@ -9,6 +9,8 @@ sys.modules["config.environments"] = runtime_environments
 
 from framework.reporting import (
     capture_failure_artifacts,
+    capture_failure_trace,
+    discard_trace,
     write_allure_environment,
     write_allure_executor,
 )
@@ -97,14 +99,27 @@ def pytest_runtest_setup(item):
 
 
 @pytest.fixture(scope="session")
-def browser_context_args(browser_context_args):
-    return {"viewport": {"width": 1280, "height": 720}}
+def browser_context_args():
+    # 保持框架原有的桌面回归视口，避免生命周期优化引入视觉行为变化。
+    return {"viewport": {"width": 1920, "height": 1080}}
 
 
 @pytest.fixture(scope="session")
 def playwright():
     with sync_playwright() as p:
         yield p
+
+
+@pytest.fixture(scope="session")
+def browser(playwright):
+    """整个测试会话复用一个浏览器进程。"""
+    headless = _get_bool_env("HEADLESS", default=True)
+    slow_mo = _get_int_env("SLOW_MO", default=100 if not headless else 0)
+    mode = "headless" if headless else "headed"
+    print(f"[fixture] launching shared browser in {mode} mode")
+    browser_instance = playwright.chromium.launch(headless=headless, slow_mo=slow_mo)
+    yield browser_instance
+    browser_instance.close()
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -117,14 +132,33 @@ def allure_environment_metadata():
 
 
 @pytest.fixture(scope="function")
-def page(playwright, request):
-    headless = _get_bool_env("HEADLESS", default=False)
-    slow_mo = _get_int_env("SLOW_MO", default=100 if not headless else 0)
-    mode = "headless" if headless else "headed"
-    print(f"[fixture] launching browser in {mode} mode")
-    browser = playwright.chromium.launch(headless=headless, slow_mo=slow_mo)
+def context(browser, browser_context_args, request):
+    """每条用例使用独立 Context，并开启可按失败保留的 Trace。"""
+    context_instance = browser.new_context(**browser_context_args)
+    context_instance.tracing.start(screenshots=True, snapshots=True, sources=True)
+    request.node.context = context_instance
 
-    context = browser.new_context(viewport={"width": 1920, "height": 1080})
+    yield context_instance
+
+    try:
+        failed = any(
+            getattr(request.node, phase, None) is not None
+            and getattr(request.node, phase).failed
+            for phase in ("rep_setup", "rep_call")
+        ) or bool(getattr(request.node, "_fixture_teardown_failed", False))
+        if failed:
+            capture_failure_trace(
+                context=context_instance,
+                test_name=request.node.nodeid,
+            )
+        else:
+            discard_trace(context_instance)
+    finally:
+        context_instance.close()
+
+
+@pytest.fixture(scope="function")
+def page(context, request):
     page = context.new_page()
     page.set_default_navigation_timeout(60000)
     page.set_default_timeout(30000)
@@ -136,8 +170,12 @@ def page(playwright, request):
 
     yield page
 
-    context.close()
-    browser.close()
+    if not page.is_closed():
+        try:
+            page.close()
+        except Exception:
+            request.node._fixture_teardown_failed = True
+            raise
 
 
 @pytest.fixture(scope="function")
@@ -151,8 +189,10 @@ def home_page(page):
 def pytest_runtest_makereport(item, call):
     outcome = yield
     report = outcome.get_result()
+    setattr(item, f"rep_{report.when}", report)
 
     page = getattr(item, "page", None)
+    context = getattr(item, "context", None)
 
     error_page_message = None
     if (
@@ -175,6 +215,7 @@ def pytest_runtest_makereport(item, call):
     if report.failed:
         if page is not None:
             capture_failure_artifacts(page=page, test_name=item.name)
+        # Trace 由 Context fixture 在关闭前统一保存，避免在 call 报告阶段过早停止。
 
     quality_report = getattr(item.config, "_quality_report", None)
     if quality_report is not None:

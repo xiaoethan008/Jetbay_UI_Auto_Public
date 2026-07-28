@@ -12,28 +12,33 @@ class JetCardPage(BasePage):
         self.wait_for_path(JetCardPageLocators.THANK_YOU_PATH)
 
     def wait_for_form(self):
-        # 页面上还有第三方埋点 form，这里只等待 Jet Card 自身的表单。
-        self.page.locator(JetCardPageLocators.FORM).wait_for(state="visible", timeout=15000)
+        # 页面还有第三方埋点 form，仅等待 Jet Card 自身表单。
+        self.page.locator(JetCardPageLocators.FORM).wait_for(
+            state="visible", timeout=15000
+        )
 
     def select_country_code(self):
         print("\n[jet-card] select country code")
         phone_input = self.page.locator(JetCardPageLocators.COUNTRY_CODE_TRIGGER)
         phone_input.scroll_into_view_if_needed()
+        trigger = phone_input.locator(
+            "xpath=preceding-sibling::div[@data-slot='trigger'][1]"
+        ).first
 
-        # 区号控件是自定义弹层，不是原生 select，需要点击号码框左侧触发器。
-        trigger = phone_input.locator("xpath=preceding-sibling::div[@data-slot='trigger'][1]").first
         for _ in range(5):
             trigger.click(force=True)
-            self.page.wait_for_timeout(1000)
-
-            option_count = self.page.locator(JetCardPageLocators.COUNTRY_CODE_OPTIONS).count()
-            if option_count > 7:
-                # 当前页面中第 8 个候选项可以稳定选中一个有效区号，用于通过手机号校验。
-                self.page.locator(JetCardPageLocators.COUNTRY_CODE_OPTIONS).nth(7).click(force=True)
-                self.page.wait_for_timeout(800)
+            option = self.page.locator(JetCardPageLocators.COUNTRY_CODE_OPTIONS).nth(7)
+            try:
+                option.wait_for(state="visible", timeout=3000)
+                option.click(force=True)
+                option.wait_for(state="hidden", timeout=3000)
                 return
+            except Exception:
+                continue
 
-        raise AssertionError("Unable to open the country code dropdown and select an option.")
+        raise AssertionError(
+            "Unable to open the country code dropdown and select an option."
+        )
 
     def fill_form(
         self,

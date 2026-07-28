@@ -79,7 +79,6 @@ def _normalized_text(value: str) -> str:
 def _goto_missing_route(page, target_url: str):
     response = page.goto(target_url, wait_until="domcontentloaded", timeout=60000)
     page.locator("body").wait_for(state="visible", timeout=15000)
-    page.wait_for_timeout(500)
     return response
 
 

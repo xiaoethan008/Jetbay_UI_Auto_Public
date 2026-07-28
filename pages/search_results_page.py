@@ -84,7 +84,16 @@ class SearchResultsPage(BasePage):
                     "xpath=ancestor::div[contains(@class,'cursor-pointer')][1]"
                 )
             toggle.click(force=True)
-            self.page.wait_for_timeout(300)
+            expected_count = index + 1
+            self.page.wait_for_function(
+                """
+                (count) => Array.from(document.querySelectorAll('button')).some(
+                    (button) => (button.innerText || '').includes(`Quote (${count}) aircraft`)
+                )
+                """,
+                arg=expected_count,
+                timeout=5000,
+            )
 
         return selected_count
 
@@ -112,7 +121,6 @@ class SearchResultsPage(BasePage):
         trigger = dialog.locator(SearchResultsPageLocators.COUNTRY_CODE_TRIGGER).first
         trigger.scroll_into_view_if_needed()
         trigger.click(force=True)
-        self.page.wait_for_timeout(1000)
 
         option = self.page.locator("[role='dialog'] div.cursor-pointer").filter(
             has_text=SearchResultsPageLocators.COUNTRY_CODE_OPTION
@@ -120,7 +128,7 @@ class SearchResultsPage(BasePage):
         option.wait_for(state="visible", timeout=10000)
         option.scroll_into_view_if_needed()
         option.click(force=True)
-        self.page.wait_for_timeout(800)
+        option.wait_for(state="hidden", timeout=3000)
 
     def fill_quote_form(
         self,

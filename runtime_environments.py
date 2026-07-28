@@ -5,8 +5,27 @@ from pathlib import Path
 DEFAULT_ENVIRONMENT = "test"
 
 ENVIRONMENT_DEFAULTS = {
-    "test": {
+    "dev": {
         "base_url": "https://dev.jet-bay.com",
+        "login": {
+            "email": "",
+            "password": "",
+        },
+        "form": {
+            "email": "",
+        },
+        "database": {
+            "name": "",
+            "host": "",
+            "port": 3306,
+            "user": "",
+            "password": "",
+            "db": "",
+            "charset": "utf8mb4",
+        },
+    },
+    "test": {
+        "base_url": "https://test.jet-bay.com",
         "login": {
             "email": "",
             "password": "",
@@ -72,6 +91,14 @@ def _get_env(name: str, default: str = "") -> str:
     return value.strip()
 
 
+def _get_first_env(names: tuple[str, ...], default: str = "") -> str:
+    for name in names:
+        value = _get_env(name)
+        if value:
+            return value
+    return default
+
+
 def _clean_url(value: str) -> str:
     cleaned = value.strip()
     if len(cleaned) >= 2 and cleaned[0] == cleaned[-1] and cleaned[0] in {'"', "'"}:
@@ -105,25 +132,43 @@ def get_current_environment() -> dict:
     login_defaults = defaults.get("login", {})
     form_defaults = defaults.get("form", {})
     database_defaults = defaults.get("database", {})
-    login_email = _get_env(f"{prefix}_LOGIN_EMAIL", login_defaults.get("email", ""))
+    nonprod_fallback_prefix = "JETBAY_TEST" if env_name == "dev" else "JETBAY_DEV"
+    shared_prefix = "JETBAY_NONPROD"
+
+    def value_for(suffix: str, default: str = "") -> str:
+        names = [f"{prefix}_{suffix}"]
+        if env_name in {"dev", "test"}:
+            names.extend((f"{shared_prefix}_{suffix}", f"{nonprod_fallback_prefix}_{suffix}"))
+        return _get_first_env(tuple(names), default)
+
+    def int_value_for(suffix: str, default: int) -> int:
+        value = value_for(suffix, str(default))
+        try:
+            return int(value)
+        except ValueError:
+            return default
+
+    login_email = value_for("LOGIN_EMAIL", login_defaults.get("email", ""))
 
     return {
-        "base_url": _clean_url(_get_env(f"{prefix}_BASE_URL", defaults.get("base_url", ""))),
+        "base_url": _clean_url(
+            _get_env(f"{prefix}_BASE_URL", defaults.get("base_url", ""))
+        ),
         "login": {
             "email": login_email,
-            "password": _get_env(f"{prefix}_LOGIN_PASSWORD", login_defaults.get("password", "")),
+            "password": value_for("LOGIN_PASSWORD", login_defaults.get("password", "")),
         },
         "form": {
-            "email": _get_env(f"{prefix}_FORM_EMAIL", form_defaults.get("email", "")) or login_email,
+            "email": value_for("FORM_EMAIL", form_defaults.get("email", "")) or login_email,
         },
         "database": {
-            "name": _get_env(f"{prefix}_DB_NAME", database_defaults.get("name", "")),
-            "host": _get_env(f"{prefix}_DB_HOST", database_defaults.get("host", "")),
-            "port": _get_env_int(f"{prefix}_DB_PORT", database_defaults.get("port", 3306)),
-            "user": _get_env(f"{prefix}_DB_USER", database_defaults.get("user", "")),
-            "password": _get_env(f"{prefix}_DB_PASSWORD", database_defaults.get("password", "")),
-            "db": _get_env(f"{prefix}_DB_DATABASE", database_defaults.get("db", "")),
-            "charset": _get_env(f"{prefix}_DB_CHARSET", database_defaults.get("charset", "utf8mb4")),
+            "name": value_for("DB_NAME", database_defaults.get("name", "")),
+            "host": value_for("DB_HOST", database_defaults.get("host", "")),
+            "port": int_value_for("DB_PORT", database_defaults.get("port", 3306)),
+            "user": value_for("DB_USER", database_defaults.get("user", "")),
+            "password": value_for("DB_PASSWORD", database_defaults.get("password", "")),
+            "db": value_for("DB_DATABASE", database_defaults.get("db", "")),
+            "charset": value_for("DB_CHARSET", database_defaults.get("charset", "utf8mb4")),
         },
     }
 

@@ -1,5 +1,7 @@
 from urllib.parse import urljoin
 
+from framework.browser_utils import scroll_page_for_lazy_content, wait_for_image_loaded
+from framework.network_checker import check_urls
 from locators.travel_credit_page_locators import TravelCreditPageLocators
 from pages.base_page import BasePage
 
@@ -11,12 +13,7 @@ class TravelCreditPage(BasePage):
         self.wait_for_path(TravelCreditPageLocators.PATH)
 
     def load_all_content_images(self):
-        self.page.wait_for_load_state("domcontentloaded")
-        for _ in range(6):
-            self.page.mouse.wheel(0, 1400)
-            self.page.wait_for_timeout(500)
-        self.page.mouse.wheel(0, -10000)
-        self.page.wait_for_timeout(1000)
+        scroll_page_for_lazy_content(self.page)
 
     def has_expected_content(self) -> bool:
         body_text = self.page.locator("body").inner_text()
@@ -53,14 +50,8 @@ class TravelCreditPage(BasePage):
                 if not is_in_viewport:
                     continue
 
-                is_complete = False
-                natural_width = 0
-                for _ in range(3):
-                    is_complete = image.evaluate("(el) => el.complete")
-                    natural_width = image.evaluate("(el) => el.naturalWidth")
-                    if is_complete and natural_width > 0:
-                        break
-                    self.page.wait_for_timeout(800)
+                is_complete = wait_for_image_loaded(image, timeout=2400)
+                natural_width = image.evaluate("(el) => el.naturalWidth")
 
                 if not is_complete or natural_width <= 0:
                     broken_images.append(
@@ -97,17 +88,7 @@ class TravelCreditPage(BasePage):
         return unique_links
 
     def get_inaccessible_links(self) -> list[dict]:
-        inaccessible_links = []
-
-        for href in self.get_unique_page_links():
-            target_url = urljoin(self.page.url, href)
-            try:
-                response = self.page.request.get(
-                    target_url, timeout=30000, fail_on_status_code=False
-                )
-                if response.status >= 400:
-                    inaccessible_links.append({"href": target_url, "status": response.status})
-            except Exception as exc:
-                inaccessible_links.append({"href": target_url, "status": str(exc)})
-
-        return inaccessible_links
+        target_urls = [
+            urljoin(self.page.url, href) for href in self.get_unique_page_links()
+        ]
+        return check_urls(self.page.request, target_urls)

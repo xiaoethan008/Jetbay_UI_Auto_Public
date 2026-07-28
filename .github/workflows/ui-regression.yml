@@ -12,7 +12,7 @@ jobs:
     env:
       HEADLESS: "true"
       TEST_ENV: test
-      QA_REPORT_VERSION: V4.1.1
+      QA_REPORT_VERSION: V4.1.4
       JETBAY_TEST_BASE_URL: ${{ secrets.JETBAY_TEST_BASE_URL }}
       JETBAY_TEST_LOGIN_EMAIL: ${{ secrets.JETBAY_TEST_LOGIN_EMAIL }}
       JETBAY_TEST_LOGIN_PASSWORD: ${{ secrets.JETBAY_TEST_LOGIN_PASSWORD }}

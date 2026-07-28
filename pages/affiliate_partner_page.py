@@ -45,8 +45,10 @@ class AffiliatePartnerPage(BasePage):
             form.locator(
                 f"xpath=following::button[normalize-space()='{AffiliatePartnerPageLocators.SUBMIT_BUTTON_TEXT}'][1]"
             ).first.click()
-        self.page.wait_for_timeout(3000)
-
     def has_already_submitted_notice(self) -> bool:
         notice = self.page.get_by_text(AffiliatePartnerPageLocators.ALREADY_SUBMITTED_TEXT)
-        return notice.count() > 0 and notice.first.is_visible()
+        try:
+            notice.first.wait_for(state="visible", timeout=10000)
+            return True
+        except Exception:
+            return False

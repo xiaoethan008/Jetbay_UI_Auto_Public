@@ -9,7 +9,9 @@ def test_mobile_menu_exposes_primary_navigation(page):
 
     # 移动端 Header 第一个可见按钮是汉堡菜单入口。
     page.locator("header button:visible").first.click()
-    page.wait_for_timeout(500)
+    page.get_by_text("Private Jet Charter", exact=True).first.wait_for(
+        state="visible", timeout=5000
+    )
 
     body_text = page.locator("body").inner_text()
     expected_entries = [

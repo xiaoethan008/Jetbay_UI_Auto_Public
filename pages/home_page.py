@@ -2,6 +2,8 @@ from urllib.parse import urljoin
 import re
 
 from config.search_routes import SEARCHABLE_CITY_PAIRS, SEARCHABLE_MULTI_CITY_ROUTES
+from framework.browser_utils import wait_for_image_loaded, wait_for_render_frames
+from framework.network_checker import check_urls
 from runtime_environments import get_current_environment
 from locators.home_page_locators import HomePageLocators
 from pages.base_page import BasePage
@@ -21,7 +23,6 @@ class HomePage(BasePage):
         self.page.get_by_role("button", name=HomePageLocators.LOGIN_BUTTON_TEXT).first.wait_for(
             state="visible", timeout=15000
         )
-        self.page.wait_for_timeout(3000)
 
     def _get_base_url(self) -> str:
         return get_current_environment()["base_url"].rstrip("/")
@@ -58,7 +59,7 @@ class HomePage(BasePage):
 
         link.wait_for(state="visible", timeout=timeout)
         link.scroll_into_view_if_needed()
-        self.page.wait_for_timeout(300)
+        wait_for_render_frames(self.page)
         link.click(force=True)
         return True
 
@@ -71,7 +72,7 @@ class HomePage(BasePage):
         try:
             top_menu.wait_for(state="visible", timeout=3000)
             top_menu.hover()
-            self.page.wait_for_timeout(600)
+            wait_for_render_frames(self.page)
         except PlaywrightTimeoutError:
             return
 
@@ -134,7 +135,7 @@ class HomePage(BasePage):
     def select_trip_type(self, trip_type_text: str):
         print(f"\n[search] trip type: {trip_type_text}")
         self.page.get_by_text(trip_type_text, exact=True).first.click()
-        self.page.wait_for_timeout(1000)
+        wait_for_render_frames(self.page)
 
     def _get_airport_input(self, index: int):
         return self.page.locator(HomePageLocators.COMBOBOX_INPUTS).nth(index)
@@ -155,6 +156,7 @@ class HomePage(BasePage):
                         continue
                     if city.lower() in option_text.lower():
                         return option
+            # 机场联想列表分批刷新且没有稳定的完成标记，保留短轮询间隔。
             self.page.wait_for_timeout(250)
 
         return fallback_option
@@ -175,7 +177,7 @@ class HomePage(BasePage):
 
         option.scroll_into_view_if_needed()
         option.click(force=True)
-        self.page.wait_for_timeout(800)
+        wait_for_render_frames(self.page)
 
     def type_airport_without_selecting(self, input_index: int, value: str):
         print(f"\n[search] raw airport[{input_index}]: {self._safe_text(value[:60])}")
@@ -187,7 +189,7 @@ class HomePage(BasePage):
         field.press("Control+A")
         field.press("Backspace")
         field.fill(value)
-        self.page.wait_for_timeout(1200)
+        wait_for_render_frames(self.page)
 
     def _try_select_airport(self, input_index: int, city: str, option_timeout: int = 2500) -> bool:
         """尝试选择机场，搜不到候选项时返回 False。"""
@@ -206,12 +208,12 @@ class HomePage(BasePage):
                 raise PlaywrightTimeoutError(f"No airport option matched {city}")
             option.scroll_into_view_if_needed()
             option.click(force=True)
-            self.page.wait_for_timeout(800)
+            wait_for_render_frames(self.page)
             return True
         except (PlaywrightTimeoutError, AssertionError):
             field.press("Control+A")
             field.press("Backspace")
-            self.page.wait_for_timeout(300)
+            wait_for_render_frames(self.page)
             return False
 
     def enter_origin(self, origin: str):
@@ -296,7 +298,6 @@ class HomePage(BasePage):
                     break
         button.wait_for(state="visible", timeout=10000)
         button.click()
-        self.page.wait_for_timeout(1000)
 
     def has_same_city_validation_error(self) -> bool:
         error = self.page.get_by_text(HomePageLocators.SAME_CITY_VALIDATION_TEXT).first
@@ -324,12 +325,15 @@ class HomePage(BasePage):
         print("\n[login] open dialog")
         button = self.page.get_by_role("button", name=HomePageLocators.LOGIN_BUTTON_TEXT).first
         button.wait_for(state="visible", timeout=10000)
+        email_input = self.page.locator("input[name='email']:visible").first
 
         for _ in range(3):
             button.click(force=True)
-            self.page.wait_for_timeout(1500)
-            if self.page.locator("input[name='email']:visible").count() > 0:
+            try:
+                email_input.wait_for(state="visible", timeout=3000)
                 return
+            except PlaywrightTimeoutError:
+                continue
 
         raise AssertionError("Login dialog did not open.")
 
@@ -420,7 +424,7 @@ class HomePage(BasePage):
                 continue
             if box["width"] >= 16 and box["height"] >= 16:
                 button.click(force=True)
-                self.page.wait_for_timeout(500)
+                dialog.wait_for(state="hidden", timeout=5000)
                 return
 
     def login_with_password(self, email: str, password: str):
@@ -475,7 +479,10 @@ class HomePage(BasePage):
         self._close_visible_login_dialog()
         if self.page.locator("header img[alt='avatar']:visible").count() == 0:
             self.page.reload(wait_until="domcontentloaded", timeout=90000)
-            self.page.wait_for_timeout(3000)
+            self.page.wait_for_function(
+                "() => document.querySelector('header') !== null",
+                timeout=10000,
+            )
 
     def is_logged_in(self) -> bool:
         return self._has_completed_login_state()
@@ -540,7 +547,6 @@ class HomePage(BasePage):
             "() => ['', '/', '/en-us'].includes(window.location.pathname)",
             timeout=15000,
         )
-        self.page.wait_for_timeout(800)
 
     def has_loaded_hero_banner(self) -> bool:
         try:
@@ -552,14 +558,7 @@ class HomePage(BasePage):
         if not box or box["width"] <= 0 or box["height"] <= 0:
             return False
 
-        for _ in range(5):
-            is_complete = banner_image.evaluate("(el) => el.complete")
-            natural_width = banner_image.evaluate("(el) => el.naturalWidth")
-            if is_complete and natural_width > 0:
-                return True
-            self.page.wait_for_timeout(800)
-
-        return False
+        return wait_for_image_loaded(banner_image, timeout=4000)
 
     def _get_hero_banner_link(self):
         candidates = self.page.locator("main a[href]:visible")
@@ -596,7 +595,6 @@ class HomePage(BasePage):
         print("\n[banner] click hero banner")
         target_href = self.get_hero_banner_href()
         self.goto(urljoin(self._get_base_url() + "/", target_href.lstrip("/")))
-        self.page.wait_for_timeout(3000)
 
     def get_visible_popular_route_links(self) -> list[str]:
         self.page.get_by_text(
@@ -618,7 +616,7 @@ class HomePage(BasePage):
         route.wait_for(state="visible", timeout=15000)
         href = route.get_attribute("href") or ""
         route.click(force=True)
-        self.page.wait_for_timeout(3000)
+        self.page.wait_for_url("**/fixed-price-charter/**", timeout=15000)
         return href
 
     def is_on_popular_route_detail_page(self) -> bool:
@@ -631,7 +629,7 @@ class HomePage(BasePage):
         title = self.page.get_by_text(HomePageLocators.SPECIALTY_FLIGHTS_TITLE, exact=True).first
         title.wait_for(state="visible", timeout=15000)
         title.scroll_into_view_if_needed()
-        self.page.wait_for_timeout(800)
+        wait_for_render_frames(self.page)
 
     def has_specialty_flights_section(self) -> bool:
         self._scroll_to_specialty_flights()
@@ -644,7 +642,7 @@ class HomePage(BasePage):
         tab = self.page.get_by_role("button", name=tab_text).first
         tab.wait_for(state="visible", timeout=10000)
         tab.click(force=True)
-        self.page.wait_for_timeout(1200)
+        wait_for_render_frames(self.page)
 
     def get_specialty_view_all_href(self) -> str:
         self._scroll_to_specialty_flights()
@@ -669,8 +667,15 @@ class HomePage(BasePage):
         self._scroll_to_specialty_flights()
         link = self.page.get_by_text(HomePageLocators.SPECIALTY_VIEW_ALL_TEXT, exact=True).first
         link.wait_for(state="visible", timeout=10000)
+        target_href = link.get_attribute("href")
         link.click(force=True)
-        self.page.wait_for_timeout(3000)
+        if target_href:
+            self.page.wait_for_url(
+                lambda url: target_href.rstrip("/") in url.rstrip("/"),
+                timeout=15000,
+            )
+        else:
+            self.page.wait_for_load_state("domcontentloaded")
 
     def get_footer_link_texts(self) -> list[str]:
         footer_links = self.page.locator(HomePageLocators.FOOTER_LINKS)
@@ -688,9 +693,9 @@ class HomePage(BasePage):
         return all(text in footer_texts for text in HomePageLocators.FOOTER_EXPECTED_LINK_TEXTS)
 
     def get_inaccessible_footer_links(self) -> list[dict]:
-        inaccessible_links = []
         footer_links = self.page.locator(HomePageLocators.FOOTER_LINKS)
         checked_hrefs: set[str] = set()
+        target_urls: list[str] = []
 
         for index in range(footer_links.count()):
             href = footer_links.nth(index).get_attribute("href")
@@ -703,16 +708,9 @@ class HomePage(BasePage):
                 continue
 
             target_url = urljoin(self.page.url, href.replace("/en-us", "", 1))
-            try:
-                response = self.page.request.get(
-                    target_url, timeout=15000, fail_on_status_code=False
-                )
-                if response.status >= 400:
-                    inaccessible_links.append({"href": target_url, "status": response.status})
-            except Exception as exc:
-                inaccessible_links.append({"href": target_url, "status": str(exc)})
+            target_urls.append(target_url)
 
-        return inaccessible_links
+        return check_urls(self.page.request, target_urls)
 
     def open_affiliate_partner_from_home(self):
         print("\n[affiliate] open from home page")
@@ -727,7 +725,6 @@ class HomePage(BasePage):
         )
         if not opened:
             self._goto_path(HomePageLocators.AFFILIATE_PARTNER_HREF_KEYWORD)
-        self.page.wait_for_timeout(3000)
 
     def open_private_jet_from_home(self):
         print("\n[private-jet] open from home page")
@@ -820,7 +817,6 @@ class HomePage(BasePage):
         if cards.count() == 0:
             raise AssertionError("Empty Leg route cards were not found on the home page.")
         cards.first.wait_for(state="visible", timeout=15000)
-        self.page.wait_for_timeout(1200)
 
     def get_empty_leg_cards(self) -> list[dict]:
         self.wait_for_empty_leg_cards()
@@ -874,7 +870,7 @@ class HomePage(BasePage):
         broken_images = []
         section = self._get_empty_leg_section()
         section.scroll_into_view_if_needed()
-        self.page.wait_for_timeout(1000)
+        wait_for_render_frames(self.page)
         images = section.locator(HomePageLocators.EMPTY_LEG_CARD_IMAGES)
 
         for index in range(images.count()):
@@ -902,14 +898,8 @@ class HomePage(BasePage):
             if not is_in_viewport:
                 continue
 
-            is_complete = False
-            natural_width = 0
-            for _ in range(3):
-                is_complete = image.evaluate("(el) => el.complete")
-                natural_width = image.evaluate("(el) => el.naturalWidth")
-                if is_complete and natural_width > 0:
-                    break
-                self.page.wait_for_timeout(800)
+            is_complete = wait_for_image_loaded(image, timeout=2400)
+            natural_width = image.evaluate("(el) => el.naturalWidth")
 
             if not is_complete or natural_width <= 0:
                 broken_images.append(
@@ -946,14 +936,12 @@ class HomePage(BasePage):
             "xpath=preceding-sibling::div[@data-slot='trigger'][1]"
         ).first
         trigger.click(force=True)
-        self.page.wait_for_timeout(1000)
 
         option = self.page.locator("[role='dialog'] div.cursor-pointer").filter(
             has_text=HomePageLocators.EMPTY_LEG_COUNTRY_CODE_OPTION
         ).first
         option.wait_for(state="visible", timeout=10000)
         option.click(force=True)
-        self.page.wait_for_timeout(800)
 
     def fill_empty_leg_booking_form(
         self,
@@ -984,13 +972,16 @@ class HomePage(BasePage):
         self._get_empty_leg_form().locator(
             f"button:has-text('{HomePageLocators.EMPTY_LEG_SUBMIT_BUTTON_TEXT}')"
         ).click()
-        self.page.wait_for_timeout(2000)
 
     def has_empty_leg_phone_error(self) -> bool:
         error = self._get_empty_leg_dialog().get_by_text(
             HomePageLocators.EMPTY_LEG_PHONE_ERROR_TEXT
         )
-        return error.count() > 0 and error.first.is_visible()
+        try:
+            error.first.wait_for(state="visible", timeout=5000)
+            return True
+        except PlaywrightTimeoutError:
+            return False
 
     def wait_for_thank_you_page(self):
         self.wait_for_path(HomePageLocators.THANK_YOU_PATH)
