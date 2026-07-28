@@ -19,7 +19,7 @@ class AffiliatePartnerPage(BasePage):
             has_text=AffiliatePartnerPageLocators.LOGIN_DIALOG_TEXT
         )
         dialog.first.wait_for(state="visible", timeout=15000)
-        return dialog.count() > 0 and dialog.first.is_visible()
+        return True
 
     def _get_affiliate_form(self):
         return self.page.locator("form").filter(

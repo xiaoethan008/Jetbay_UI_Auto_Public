@@ -223,13 +223,14 @@ def _submit_fixed_price_with_expired_date(page, locale: str = "") -> tuple[dict,
         submit_button.click()
     assert capture.get("response"), "Fixed Price lead request was not observed after Submit"
 
-    modal = page.get_by_text("Departure Date Unavailable", exact=True)
-    close_button = page.locator("button").filter(has_text="Select new date")
+    close_button = page.locator("button:visible").filter(has_text="Select new date")
     if capture["response"].get("code") == 23103:
-        modal.first.wait_for(state="visible", timeout=10_000)
+        close_button.first.wait_for(state="visible", timeout=10_000)
+    modal = close_button.first.locator("xpath=ancestor::*[@role='dialog'][1]")
+    modal_text = modal.inner_text() if modal.count() else ""
     return capture, {
         "modal_count": close_button.count(),
-        "title": modal.first.inner_text() if modal.count() else "",
+        "title": modal_text.splitlines()[0].strip() if modal_text else "",
         "body": page.locator("body").inner_text(),
     }
 
@@ -244,9 +245,9 @@ def test_v413_fixed_price_expired_submit_has_one_closable_modal_and_client_time_
     assert capture["payload"].get("clientTimezone")
     assert visible["modal_count"] == 1
 
-    close_button = page.locator("button").filter(has_text="Select new date")
-    close_button.click()
-    assert close_button.count() == 0
+    close_button = page.locator("button:visible").filter(has_text="Select new date")
+    close_button.first.click()
+    close_button.first.wait_for(state="hidden", timeout=5000)
 
 
 @pytest.mark.p1
