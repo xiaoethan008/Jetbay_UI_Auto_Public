@@ -295,17 +295,18 @@ class ServiceMenuPage(BasePage):
         click_count = 0
 
         for _ in range(max_clicks):
-            candidates = self.page.locator(
-                "main div.cursor-pointer, main button:visible, main a:visible"
-            ).filter(has_text="View More")
+            main = self.page.get_by_role("main")
+            candidates = main.get_by_role("button", name="View More", exact=True).or_(
+                main.get_by_role("link", name="View More", exact=True)
+            )
             if candidates.count() == 0:
                 break
-            view_more = candidates.first
+            view_more = candidates.filter(visible=True).first
             if not view_more.is_visible():
                 break
             view_more.scroll_into_view_if_needed()
             wait_for_render_frames(self.page)
-            view_more.click(force=True)
+            view_more.click()
             click_count += 1
             # View More 没有稳定响应接口或加载完成标记；保留短等待供动态内容提交渲染。
             self.page.wait_for_timeout(2000)
@@ -320,8 +321,9 @@ class ServiceMenuPage(BasePage):
             return True
 
         if "/empty-leg-recommendation" in self.page.url:
-            cards = self.page.locator("div.cursor-pointer").filter(
-                has=self.page.locator(
+            main = self.page.get_by_role("main")
+            cards = main.get_by_role("link").filter(
+                has=main.locator(
                     "img[src*='emptyLegRec'], img[alt*='Empty-Leg'], img[alt*='empty-leg']"
                 )
             )
@@ -331,7 +333,7 @@ class ServiceMenuPage(BasePage):
                 wait_for_render_frames(self.page)
                 previous_url = self.page.url
                 try:
-                    card.click(force=True)
+                    card.click()
                 except Exception:
                     card.evaluate("(el) => el.click()")
                 self.page.wait_for_url(
@@ -348,16 +350,19 @@ class ServiceMenuPage(BasePage):
         if "/video-centre" not in self.page.url:
             return False
 
-        video_cards = self.page.locator("main div.cursor-pointer")
+        main = self.page.get_by_role("main")
+        video_cards = main.get_by_role("button").filter(
+            has=main.locator("img")
+        )
         if video_cards.count() == 0:
             return False
 
         video_cards.first.scroll_into_view_if_needed()
         wait_for_render_frames(self.page)
-        video_cards.first.click(force=True)
+        video_cards.first.click()
 
-        dialog = self.page.locator("[role='dialog']")
-        iframe = self.page.locator("iframe[src*='youtube.com/embed']")
+        dialog = self.page.get_by_role("dialog")
+        iframe = dialog.locator("iframe[src*='youtube.com/embed']")
         dialog.first.wait_for(state="visible", timeout=10000)
         iframe.first.wait_for(state="attached", timeout=10000)
         return (

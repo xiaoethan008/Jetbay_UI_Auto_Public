@@ -20,7 +20,9 @@ class HomePage(BasePage):
                 "Invalid base_url for test environment. Check JETBAY_TEST_BASE_URL in GitHub Secrets."
             )
         self.goto(base_url)
-        self.page.get_by_role("button", name=HomePageLocators.LOGIN_BUTTON_TEXT).first.wait_for(
+        self.page.locator("header").get_by_role(
+            "button", name=HomePageLocators.LOGIN_BUTTON_TEXT
+        ).wait_for(
             state="visible", timeout=15000
         )
 
@@ -60,12 +62,12 @@ class HomePage(BasePage):
         link.wait_for(state="visible", timeout=timeout)
         link.scroll_into_view_if_needed()
         wait_for_render_frames(self.page)
-        link.click(force=True)
+        link.click()
         return True
 
     def _hover_top_menu_if_visible(self, top_menu_text: str):
-        header = self.page.locator("header").first
-        top_menu = header.get_by_text(top_menu_text, exact=True).first
+        header = self.page.locator("header")
+        top_menu = header.get_by_role("link", name=top_menu_text, exact=True)
         if top_menu.count() == 0:
             return
 
@@ -134,11 +136,25 @@ class HomePage(BasePage):
 
     def select_trip_type(self, trip_type_text: str):
         print(f"\n[search] trip type: {trip_type_text}")
-        self.page.get_by_text(trip_type_text, exact=True).first.click()
+        self._get_search_form().get_by_role(
+            "button", name=trip_type_text, exact=True
+        ).click()
         wait_for_render_frames(self.page)
 
+    def _get_search_form(self):
+        search_button = self.page.get_by_role(
+            "button",
+            name=re.compile(
+                "|".join(re.escape(text) for text in HomePageLocators.SEARCH_BUTTON_TEXT_OPTIONS),
+                re.IGNORECASE,
+            ),
+        )
+        return self.page.locator("form").filter(
+            has=self.page.get_by_role("combobox")
+        ).filter(has=search_button)
+
     def _get_airport_input(self, index: int):
-        return self.page.locator(HomePageLocators.COMBOBOX_INPUTS).nth(index)
+        return self._get_search_form().get_by_role("combobox").nth(index)
 
     def _find_matching_airport_option(self, city: str):
         options = self.page.locator(HomePageLocators.AIRPORT_OPTIONS)
@@ -176,7 +192,7 @@ class HomePage(BasePage):
             raise AssertionError(f"Unable to find airport option matching: {city}")
 
         option.scroll_into_view_if_needed()
-        option.click(force=True)
+        option.click()
         wait_for_render_frames(self.page)
 
     def type_airport_without_selecting(self, input_index: int, value: str):
@@ -207,7 +223,7 @@ class HomePage(BasePage):
             if option is None:
                 raise PlaywrightTimeoutError(f"No airport option matched {city}")
             option.scroll_into_view_if_needed()
-            option.click(force=True)
+            option.click()
             wait_for_render_frames(self.page)
             return True
         except (PlaywrightTimeoutError, AssertionError):
@@ -283,19 +299,14 @@ class HomePage(BasePage):
 
     def click_search(self):
         print("\n[search] submit")
-        button = self.page.locator(HomePageLocators.SEARCH_BUTTON).first
-        if button.count() == 0:
-            for text in HomePageLocators.SEARCH_BUTTON_TEXT_OPTIONS:
-                candidate = self.page.get_by_role("button", name=text).first
-                if candidate.count() > 0:
-                    button = candidate
-                    break
-        if button.count() == 0:
-            for text in HomePageLocators.SEARCH_BUTTON_TEXT_OPTIONS:
-                candidate = self.page.locator(f"button:has-text('{text}'):visible").first
-                if candidate.count() > 0:
-                    button = candidate
-                    break
+        search_form = self._get_search_form()
+        button = search_form.get_by_role(
+            "button",
+            name=re.compile(
+                "|".join(re.escape(text) for text in HomePageLocators.SEARCH_BUTTON_TEXT_OPTIONS),
+                re.IGNORECASE,
+            ),
+        )
         button.wait_for(state="visible", timeout=10000)
         button.click()
 
@@ -323,14 +334,17 @@ class HomePage(BasePage):
 
     def open_login_dialog(self):
         print("\n[login] open dialog")
-        button = self.page.get_by_role("button", name=HomePageLocators.LOGIN_BUTTON_TEXT).first
+        button = self.page.locator("header").get_by_role(
+            "button", name=HomePageLocators.LOGIN_BUTTON_TEXT
+        )
         button.wait_for(state="visible", timeout=10000)
-        email_input = self.page.locator("input[name='email']:visible").first
 
         for _ in range(3):
-            button.click(force=True)
+            button.click()
             try:
-                email_input.wait_for(state="visible", timeout=3000)
+                self._get_login_dialog().locator(
+                    HomePageLocators.LOGIN_EMAIL_INPUT
+                ).wait_for(state="visible", timeout=3000)
                 return
             except PlaywrightTimeoutError:
                 continue
@@ -338,9 +352,9 @@ class HomePage(BasePage):
         raise AssertionError("Login dialog did not open.")
 
     def _get_login_dialog(self):
-        return self.page.locator("[role='dialog']").filter(
+        return self.page.get_by_role("dialog").filter(
             has=self.page.locator("input[name='password']")
-        ).first
+        )
 
     def _has_local_login_info(self) -> bool:
         return self.page.evaluate(
@@ -430,17 +444,15 @@ class HomePage(BasePage):
     def login_with_password(self, email: str, password: str):
         print("\n[login] submit credentials")
         self.open_login_dialog()
-        self.page.locator("input[name='email']:visible").first.wait_for(state="visible", timeout=15000)
-        self.page.locator("input[name='email']:visible").first.fill(email)
-        self.page.locator("input[name='password']:visible").first.fill(password)
-
         dialog = self._get_login_dialog()
-        if dialog.count() > 0:
-            dialog.get_by_role("button", name=HomePageLocators.LOGIN_SUBMIT_BUTTON_TEXT).first.click()
-        else:
-            self.page.locator("button:visible").filter(
-                has_text=HomePageLocators.LOGIN_SUBMIT_BUTTON_TEXT
-            ).last.click()
+        email_input = dialog.locator(HomePageLocators.LOGIN_EMAIL_INPUT)
+        password_input = dialog.locator(HomePageLocators.LOGIN_PASSWORD_INPUT)
+        email_input.wait_for(state="visible", timeout=15000)
+        email_input.fill(email)
+        password_input.fill(password)
+        dialog.get_by_role(
+            "button", name=HomePageLocators.LOGIN_SUBMIT_BUTTON_TEXT
+        ).click()
         self.page.wait_for_function(
             """
             () => {
@@ -527,6 +539,9 @@ class HomePage(BasePage):
         return pathname in {"", "/", "/en-us"}
 
     def _get_header_logo_link(self):
+        semantic_logo = self.page.locator("header").get_by_role("link", name="Cruip")
+        if semantic_logo.count() == 1:
+            return semantic_logo
         for selector in HomePageLocators.HEADER_LOGO_LINK_CANDIDATES:
             candidate = self.page.locator(selector).first
             try:
@@ -542,7 +557,7 @@ class HomePage(BasePage):
     def click_header_logo(self):
         print("\n[nav] click logo")
         logo = self._get_header_logo_link()
-        logo.click(force=True)
+        logo.click()
         self.page.wait_for_function(
             "() => ['', '/', '/en-us'].includes(window.location.pathname)",
             timeout=15000,
@@ -615,7 +630,7 @@ class HomePage(BasePage):
         route = self.page.locator(HomePageLocators.POPULAR_ROUTE_LINKS).first
         route.wait_for(state="visible", timeout=15000)
         href = route.get_attribute("href") or ""
-        route.click(force=True)
+        route.click()
         self.page.wait_for_url("**/fixed-price-charter/**", timeout=15000)
         return href
 
@@ -639,9 +654,11 @@ class HomePage(BasePage):
     def click_specialty_flights_tab(self, tab_text: str):
         print(f"\n[specialty] click tab: {tab_text}")
         self._scroll_to_specialty_flights()
-        tab = self.page.get_by_role("button", name=tab_text).first
+        tab = self.page.get_by_role("main").get_by_role(
+            "button", name=tab_text, exact=True
+        )
         tab.wait_for(state="visible", timeout=10000)
-        tab.click(force=True)
+        tab.click()
         wait_for_render_frames(self.page)
 
     def get_specialty_view_all_href(self) -> str:
@@ -668,7 +685,7 @@ class HomePage(BasePage):
         link = self.page.get_by_text(HomePageLocators.SPECIALTY_VIEW_ALL_TEXT, exact=True).first
         link.wait_for(state="visible", timeout=10000)
         target_href = link.get_attribute("href")
-        link.click(force=True)
+        link.click()
         if target_href:
             self.page.wait_for_url(
                 lambda url: target_href.rstrip("/") in url.rstrip("/"),
@@ -969,8 +986,8 @@ class HomePage(BasePage):
 
     def submit_empty_leg_booking_form(self):
         print("\n[empty-leg] submit booking form")
-        self._get_empty_leg_form().locator(
-            f"button:has-text('{HomePageLocators.EMPTY_LEG_SUBMIT_BUTTON_TEXT}')"
+        self._get_empty_leg_form().get_by_role(
+            "button", name=HomePageLocators.EMPTY_LEG_SUBMIT_BUTTON_TEXT
         ).click()
 
     def has_empty_leg_phone_error(self) -> bool:

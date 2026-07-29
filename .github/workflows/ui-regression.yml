@@ -46,6 +46,10 @@ jobs:
       - name: Run regression suite
         run: python -m pytest -v -s --alluredir=allure-results
 
+      - name: Generate UI automation blueprint
+        if: always()
+        run: python scripts/generate_ui_automation_blueprint.py
+
       - name: Install Allure CLI
         if: always()
         run: npm install -g allure-commandline

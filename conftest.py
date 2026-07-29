@@ -226,4 +226,7 @@ def pytest_sessionfinish(session, exitstatus):
     """测试执行结束后生成面向 QA 的质量报告。"""
     quality_report = getattr(session.config, "_quality_report", None)
     if quality_report is not None:
-        quality_report.write_reports(exitstatus=exitstatus)
+        summary = quality_report.write_reports(exitstatus=exitstatus)
+        gate = summary.get("quality_gate", {})
+        if gate.get("enforced") and gate.get("status") != "PASS":
+            session.exitstatus = 1

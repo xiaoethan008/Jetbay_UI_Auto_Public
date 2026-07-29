@@ -68,6 +68,8 @@ def _status(summary, open_issues):
     ]
     if failed or blocker_issues:
         return "需重点关注", "risk"
+    if summary.get("quality_gate", {}).get("status") == "ATTENTION":
+        return "质量门禁待关注", "watch"
     if skipped or open_issues:
         return "可继续观察", "watch"
     return "回归通过", "ok"
@@ -166,6 +168,8 @@ def _conclusion_text(summary, failed_tests, open_issues, status_text):
         return f"主流程自动化回归通过，仍有 {len(open_issues)} 个未修复问题，建议纳入版本遗留风险跟进。"
     if summary.get("skipped", 0):
         return f"本轮无失败用例，存在 {summary.get('skipped', 0)} 条跳过用例，需要确认跳过原因。"
+    if summary.get("quality_gate", {}).get("status") == "ATTENTION":
+        return "自动化执行未发现失败，但质量门禁存在未达标项，需结合追溯覆盖率、阻塞项和环境波动继续判断。"
     return f"本轮结论为“{status_text}”，自动化未发现阻塞问题。"
 
 
@@ -191,6 +195,8 @@ def build_summary_html(data, source_path: Path):
     open_issues = [issue for issue in issues if issue.get(FIXED_FIELD) != "是"]
     status_text, status_css = _status(summary, open_issues)
     pass_rate = summary.get("pass_rate", 0)
+    gate = summary.get("quality_gate", {})
+    gate_metrics = gate.get("metrics", {})
 
     cards = "".join(
         [
@@ -199,6 +205,17 @@ def build_summary_html(data, source_path: Path):
             _card("失败 / 跳过", f"{summary.get('failed', 0)} / {summary.get('skipped', 0)}", "risk" if failed_tests else ""),
             _card("未修复问题", summary.get("issue_list", {}).get("unfixed", 0), "risk" if open_issues else "ok"),
             _card("问题优先级", _issue_priority_counts(open_issues)),
+            _card(
+                "质量门禁",
+                gate.get("status", "未计算"),
+                "ok" if gate.get("status") == "PASS" else "risk",
+            ),
+            _card("追溯覆盖率", f"{gate_metrics.get('traceability_rate', 0)}%"),
+            _card(
+                "阻塞 / 环境波动",
+                f"{gate_metrics.get('blocked', 0)} / {gate_metrics.get('transient_environment_fluctuations', 0)}",
+                "risk" if gate_metrics.get("blocked", 0) else "",
+            ),
         ]
     )
 

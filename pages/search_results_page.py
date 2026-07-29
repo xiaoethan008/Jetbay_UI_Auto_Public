@@ -28,16 +28,18 @@ class SearchResultsPage(BasePage):
         return SearchResultsPageLocators.RESULTS_TEXT in self.page.locator("body").inner_text()
 
     def _get_result_cards(self):
-        return self.page.locator(SearchResultsPageLocators.RESULT_CARD).filter(
+        results_region = self.page.get_by_role("main")
+        return results_region.locator(SearchResultsPageLocators.RESULT_CARD).filter(
             has=self.page.get_by_role(
                 "button", name=SearchResultsPageLocators.RESULT_CARD_QUOTE_BUTTON_TEXT
             )
         )
 
     def _get_quote_summary_button(self):
-        return self.page.locator(
-            f"button:has-text('{SearchResultsPageLocators.QUOTE_SUMMARY_BUTTON_TEXT}')"
-        ).first
+        return self.page.get_by_role(
+            "button",
+            name=re.compile(r"Quote \(\d+\) aircraft"),
+        )
 
     def get_result_count(self) -> int:
         return self._get_result_cards().count()
@@ -48,9 +50,9 @@ class SearchResultsPage(BasePage):
 
         for index in range(cards.count()):
             card = cards.nth(index)
-            price_locator = card.locator(
-                f"text=/{SearchResultsPageLocators.PRICE_TEXT_PATTERN}/"
-            ).first
+            price_locator = card.get_by_text(
+                re.compile(SearchResultsPageLocators.PRICE_TEXT_PATTERN)
+            )
             price_text = price_locator.inner_text().strip() if price_locator.count() else ""
             match = re.search(r"(\d[\d,]*)\s*USD", price_text)
             if not match:
@@ -71,19 +73,16 @@ class SearchResultsPage(BasePage):
 
     def select_aircraft(self, requested_count: int = 3, max_allowed_count: int = 9) -> int:
         cards = self._get_result_cards()
-        cards.first.wait_for(state="visible", timeout=15000)
+        cards.filter(visible=True).first.wait_for(state="visible", timeout=15000)
         selected_count = min(requested_count, cards.count(), max_allowed_count)
 
         for index in range(selected_count):
             card = cards.nth(index)
-            toggle = card.locator("div.cursor-pointer").filter(
-                has=card.locator("img[alt='checkbox']")
-            ).first
-            if toggle.count() == 0:
-                toggle = card.locator("img[alt='checkbox']").first.locator(
-                    "xpath=ancestor::div[contains(@class,'cursor-pointer')][1]"
-                )
-            toggle.click(force=True)
+            unchecked_icon = card.locator("img[alt='checkbox'][src*='uncheck']")
+            unchecked_icon.wait_for(state="visible", timeout=5000)
+            toggle = unchecked_icon.locator("..")
+            toggle.evaluate("(element) => element.scrollIntoView({block: 'center'})")
+            toggle.click()
             expected_count = index + 1
             self.page.wait_for_function(
                 """
@@ -109,25 +108,31 @@ class SearchResultsPage(BasePage):
         self._get_quote_summary_button().click()
 
     def _get_quote_dialog(self):
-        return self.page.locator("[role='dialog']").filter(
-            has_text=SearchResultsPageLocators.QUOTE_DIALOG_TITLE
-        ).last
+        return self.page.get_by_role(
+            "dialog",
+            name=re.compile(SearchResultsPageLocators.QUOTE_DIALOG_TITLE, re.IGNORECASE),
+        )
 
     def wait_for_quote_dialog(self):
         self._get_quote_dialog().wait_for(state="visible", timeout=15000)
 
     def _select_country_code(self):
         dialog = self._get_quote_dialog()
-        trigger = dialog.locator(SearchResultsPageLocators.COUNTRY_CODE_TRIGGER).first
+        phone = dialog.locator(SearchResultsPageLocators.PHONE)
+        trigger = phone.locator("xpath=preceding-sibling::*[@data-slot='trigger'][1]")
         trigger.scroll_into_view_if_needed()
-        trigger.click(force=True)
+        trigger.click()
 
-        option = self.page.locator("[role='dialog'] div.cursor-pointer").filter(
-            has_text=SearchResultsPageLocators.COUNTRY_CODE_OPTION
-        ).first
+        option = self.page.get_by_role(
+            "option", name=SearchResultsPageLocators.COUNTRY_CODE_OPTION
+        )
+        if option.count() == 0:
+            option = self.page.get_by_text(
+                SearchResultsPageLocators.COUNTRY_CODE_OPTION, exact=True
+            )
         option.wait_for(state="visible", timeout=10000)
         option.scroll_into_view_if_needed()
-        option.click(force=True)
+        option.click()
         option.wait_for(state="hidden", timeout=3000)
 
     def fill_quote_form(
@@ -147,9 +152,19 @@ class SearchResultsPage(BasePage):
         dialog.locator(SearchResultsPageLocators.PHONE).fill(phone_number)
         dialog.locator(SearchResultsPageLocators.MESSAGE).fill(message)
 
-        checkboxes = dialog.locator(SearchResultsPageLocators.CHECKBOXES)
-        checkboxes.nth(SearchResultsPageLocators.CONSENT_CONTACT_INDEX).check(force=True)
-        checkboxes.nth(SearchResultsPageLocators.CONSENT_PRIVACY_INDEX).check(force=True)
+        checkboxes = dialog.get_by_role("checkbox")
+        contact = checkboxes.filter(
+            has=self.page.locator("[name='contactPermission']")
+        )
+        privacy = checkboxes.filter(
+            has=self.page.locator("[name='privacyPolicy']")
+        )
+        if contact.count() and privacy.count():
+            contact.check()
+            privacy.check()
+        else:
+            checkboxes.nth(SearchResultsPageLocators.CONSENT_CONTACT_INDEX).check()
+            checkboxes.nth(SearchResultsPageLocators.CONSENT_PRIVACY_INDEX).check()
 
     def submit_quote_form(self):
         self._get_quote_dialog().get_by_role(

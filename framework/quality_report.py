@@ -10,6 +10,8 @@ from collections import Counter, defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
 
+from framework.quality_gate import build_quality_gate
+
 
 DEFAULT_REPORT_VERSION = "V4.1.4"
 FIXED_FIELD = "是否已修复"
@@ -428,6 +430,7 @@ class QualityReportPlugin:
         print(f"\n[quality-report] HTML: {html_path}")
         print(f"[quality-report] XLSX: {xlsx_path}")
         print(f"[quality-report] CSV:  {csv_path}")
+        return summary
 
     def _build_summary(self, test_rows: list[dict], issue_rows: list[dict], exitstatus: int, issue_path):
         outcome_counts = Counter(row["outcome"] for row in test_rows)
@@ -439,6 +442,7 @@ class QualityReportPlugin:
         passed = outcome_counts.get("passed", 0)
         pass_rate = round(passed / total * 100, 2) if total else 0
         issue_status = _count_issue_status(issue_rows)
+        quality_gate = build_quality_gate(test_rows, issue_rows)
 
         return {
             "report_version": self.version,
@@ -460,6 +464,7 @@ class QualityReportPlugin:
                 "path": str(issue_path) if issue_path else "",
                 **issue_status,
             },
+            "quality_gate": quality_gate,
         }
 
     def _write_case_csv(self, path: Path, rows: list[dict]):
@@ -544,6 +549,7 @@ class QualityReportPlugin:
     {link(csv_path, "CSV 明细")} {link(xlsx_path, "Excel 报告")} {link(json_path, "JSON 原始数据")}
   </div>
   {self._render_summary_overview(summary)}
+  {self._render_quality_gate(summary)}
   {self._render_module_table(summary)}
   {self._render_case_table("失败用例", failed_rows, path.parent)}
   {self._render_case_table("跳过用例", skipped_rows, path.parent)}
@@ -578,6 +584,33 @@ class QualityReportPlugin:
             '</div>'
         )
         return f'<div class="summary-grid">{cards_html}{donut_html}</div>'
+
+    def _render_quality_gate(self, summary: dict) -> str:
+        gate = summary.get("quality_gate", {})
+        if not gate:
+            return ""
+        metrics = gate.get("metrics", {})
+        rows = "".join(
+            "<tr>"
+            f"<td>{html.escape(str(check.get('name', '')))}</td>"
+            f"<td>{html.escape(str(check.get('actual', '')))}</td>"
+            f"<td>{html.escape(str(check.get('threshold', '')))}</td>"
+            f"<td class=\"{'pass' if check.get('passed') else 'fail'}\">"
+            f"{'通过' if check.get('passed') else '未通过'}</td>"
+            "</tr>"
+            for check in gate.get("checks", [])
+        )
+        enforcement = "已启用" if gate.get("enforced") else "仅提示"
+        status_css = "pass" if gate.get("status") == "PASS" else "fail"
+        return (
+            "<h2>统一质量门禁</h2>"
+            f"<p>状态：<strong class='{status_css}'>{html.escape(str(gate.get('status', '')))}</strong>"
+            f" ｜ 执行模式：{enforcement}"
+            f" ｜ 环境波动：{metrics.get('transient_environment_fluctuations', 0)}"
+            f" ｜ 阻塞项：{metrics.get('blocked', 0)}</p>"
+            "<table><tr><th>检查项</th><th>实际值</th><th>门槛</th><th>结果</th></tr>"
+            f"{rows}</table>"
+        )
 
     def _render_module_table(self, summary: dict) -> str:
         rows = []
@@ -679,6 +712,21 @@ class QualityReportPlugin:
                     ["问题总数", summary["issue_list"]["total"]],
                     ["未修复问题", summary["issue_list"]["unfixed"]],
                     ["已修复问题", summary["issue_list"]["fixed"]],
+                    ["质量门禁", summary.get("quality_gate", {}).get("status", "")],
+                    [
+                        "用例追溯覆盖率",
+                        f'{summary.get("quality_gate", {}).get("metrics", {}).get("traceability_rate", 0)}%',
+                    ],
+                    [
+                        "阻塞项",
+                        summary.get("quality_gate", {}).get("metrics", {}).get("blocked", 0),
+                    ],
+                    [
+                        "环境波动",
+                        summary.get("quality_gate", {}).get("metrics", {}).get(
+                            "transient_environment_fluctuations", 0
+                        ),
+                    ],
                 ],
             ),
             (
