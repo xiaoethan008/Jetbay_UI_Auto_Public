@@ -7,15 +7,18 @@ class AffiliatePartnerPage(BasePage):
 
     def wait_for_page(self):
         self.wait_for_path(AffiliatePartnerPageLocators.PATH)
+        self.page.wait_for_load_state("domcontentloaded")
 
     def click_join_us_today(self):
         print("\n[affiliate] click join us today")
-        self.page.get_by_role(
+        button = self.page.get_by_role(
             "button", name=AffiliatePartnerPageLocators.JOIN_US_BUTTON_TEXT
-        ).first.click()
+        ).first
+        button.wait_for(state="visible", timeout=15000)
+        button.click()
 
     def has_login_prompt(self) -> bool:
-        dialog = self.page.locator("[role='dialog']").filter(
+        dialog = self.page.get_by_role("dialog").filter(
             has_text=AffiliatePartnerPageLocators.LOGIN_DIALOG_TEXT
         )
         dialog.first.wait_for(state="visible", timeout=15000)

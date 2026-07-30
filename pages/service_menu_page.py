@@ -1,4 +1,5 @@
 from urllib.parse import urljoin, urlparse
+import re
 
 from framework.browser_utils import (
     scroll_page_for_lazy_content,
@@ -351,8 +352,12 @@ class ServiceMenuPage(BasePage):
             return False
 
         main = self.page.get_by_role("main")
-        video_cards = main.get_by_role("button").filter(
-            has=main.locator("img")
+        featured_image = self.page.get_by_role(
+            "img",
+            name=re.compile("Company Profile Video", re.IGNORECASE),
+        )
+        video_cards = main.locator("div.cursor-pointer").filter(
+            has=featured_image
         )
         if video_cards.count() == 0:
             return False

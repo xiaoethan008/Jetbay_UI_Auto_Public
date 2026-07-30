@@ -38,7 +38,7 @@ EMPTY_LEG_LOCALE_CASES = [
             "Empty Leg Deals",
             "Private Jet Empty Leg Flights",
             "Live Empty Leg Deals",
-            "Get Alerts",
+            "Get notified",
         ),
         bottom_fragments=(
             "What Are Private Jet Empty Leg Flights?",
@@ -52,7 +52,7 @@ EMPTY_LEG_LOCALE_CASES = [
             "Empty Leg Deals",
             "Private Jet Empty Leg Flights",
             "Live Empty Leg Deals",
-            "Get Alerts",
+            "Get notified",
         ),
         bottom_fragments=(
             "What Are Private Jet Empty Leg Flights?",
@@ -66,7 +66,7 @@ EMPTY_LEG_LOCALE_CASES = [
             "空机优惠",
             "私人飞机空腿",
             "空腿航班",
-            "获取提醒",
+            "订阅通知",
         ),
         bottom_fragments=(
             "什么是私人飞机空腿航班？",
@@ -81,7 +81,7 @@ EMPTY_LEG_LOCALE_CASES = [
             "空機優惠",
             "私人飛機空腿",
             "空腿航班",
-            "取得提醒",
+            "訂閱通知",
         ),
         bottom_fragments=(
             "什麼是私人飛機空腿航班？",
@@ -96,7 +96,7 @@ EMPTY_LEG_LOCALE_CASES = [
             "空機優惠",
             "私人飛機空腿",
             "空腿航班",
-            "取得提醒",
+            "訂閱通知",
         ),
         bottom_fragments=(
             "什麼是私人飛機空腿航班？",

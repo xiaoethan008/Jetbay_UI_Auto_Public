@@ -5,6 +5,7 @@ import os
 from datetime import date, timedelta
 
 import pytest
+from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
 from runtime_environments import get_current_environment, get_current_environment_name
 
@@ -188,9 +189,16 @@ def _submit_fixed_price_with_expired_date(page, locale: str = "") -> tuple[dict,
         route.fulfill(response=response)
 
     page.route("**/lead/**", forward_expired)
-    page.locator("button:visible").filter(has_text="Book Now").first.click()
+    book_button = page.get_by_role("button", name="Book Now", exact=True).first
     dialog = page.get_by_role("dialog").first
-    dialog.wait_for(state="visible")
+    for attempt in range(2):
+        book_button.click()
+        try:
+            dialog.wait_for(state="visible", timeout=15_000)
+            break
+        except PlaywrightTimeoutError:
+            if attempt == 1:
+                raise
 
     values = {
         "Please enter your first name": "V413Regression",

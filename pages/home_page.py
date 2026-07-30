@@ -136,7 +136,7 @@ class HomePage(BasePage):
 
     def select_trip_type(self, trip_type_text: str):
         print(f"\n[search] trip type: {trip_type_text}")
-        self._get_search_form().get_by_role(
+        self._get_search_region().get_by_role(
             "button", name=trip_type_text, exact=True
         ).click()
         wait_for_render_frames(self.page)
@@ -150,6 +150,18 @@ class HomePage(BasePage):
             ),
         )
         return self.page.locator("form").filter(
+            has=self.page.get_by_role("combobox")
+        ).filter(has=search_button)
+
+    def _get_search_region(self):
+        search_button = self.page.get_by_role(
+            "button",
+            name=re.compile(
+                "|".join(re.escape(text) for text in HomePageLocators.SEARCH_BUTTON_TEXT_OPTIONS),
+                re.IGNORECASE,
+            ),
+        )
+        return self.page.locator("section").filter(
             has=self.page.get_by_role("combobox")
         ).filter(has=search_button)
 
@@ -531,6 +543,17 @@ class HomePage(BasePage):
         return texts
 
     def has_expected_header_navigation(self) -> bool:
+        self.page.wait_for_function(
+            """
+            (expected) => {
+                const header = document.querySelector('header');
+                const text = header?.innerText || '';
+                return expected.every((item) => text.includes(item));
+            }
+            """,
+            arg=list(HomePageLocators.HEADER_EXPECTED_TEXTS),
+            timeout=10000,
+        )
         visible_texts = self.get_visible_header_texts()
         return all(text in visible_texts for text in HomePageLocators.HEADER_EXPECTED_TEXTS)
 
@@ -695,6 +718,11 @@ class HomePage(BasePage):
             self.page.wait_for_load_state("domcontentloaded")
 
     def get_footer_link_texts(self) -> list[str]:
+        footer = self.page.locator("footer")
+        footer.scroll_into_view_if_needed()
+        footer.get_by_role(
+            "link", name=HomePageLocators.FOOTER_EXPECTED_LINK_TEXTS[0]
+        ).wait_for(state="visible", timeout=10000)
         footer_links = self.page.locator(HomePageLocators.FOOTER_LINKS)
         texts: list[str] = []
 

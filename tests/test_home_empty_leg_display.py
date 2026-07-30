@@ -5,4 +5,4 @@ def test_empty_leg_section_display_and_cta(home_page):
 
     section_text = home_page._get_empty_leg_section().inner_text()
     assert "View More" in section_text
-    assert "Get Alerts" in section_text
+    assert "Get notified" in section_text
