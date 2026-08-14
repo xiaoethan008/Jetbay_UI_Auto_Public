@@ -354,7 +354,7 @@ class ServiceMenuPage(BasePage):
         main = self.page.get_by_role("main")
         featured_image = self.page.get_by_role(
             "img",
-            name=re.compile("Company Profile Video", re.IGNORECASE),
+            name=re.compile(r"(?:Branding|Company Profile) Video", re.IGNORECASE),
         )
         video_cards = main.locator("div.cursor-pointer").filter(
             has=featured_image

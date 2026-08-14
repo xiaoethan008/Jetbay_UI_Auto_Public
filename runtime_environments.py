@@ -65,19 +65,32 @@ ENVIRONMENT_DEFAULTS = {
 }
 
 
-def _load_local_env_file() -> None:
-    env_path = Path(__file__).resolve().parent / ".env.local"
-    if not env_path.exists():
-        return
-
-    for raw_line in env_path.read_text(encoding="utf-8").splitlines():
+def _parse_local_env_lines(lines: list[str]) -> dict[str, str]:
+    """Parse dotenv lines using the conventional last-definition-wins rule."""
+    parsed: dict[str, str] = {}
+    for raw_line in lines:
         line = raw_line.strip()
         if not line or line.startswith("#") or "=" not in line:
             continue
         key, value = line.split("=", 1)
         key = key.strip()
         value = value.strip().strip('"').strip("'")
-        if key and key not in os.environ:
+        if key:
+            parsed[key] = value
+    return parsed
+
+
+def _load_local_env_file() -> None:
+    env_path = Path(__file__).resolve().parent / ".env.local"
+    if not env_path.exists():
+        return
+
+    existing_environment_keys = set(os.environ)
+    parsed_values = _parse_local_env_lines(
+        env_path.read_text(encoding="utf-8").splitlines()
+    )
+    for key, value in parsed_values.items():
+        if key not in existing_environment_keys:
             os.environ[key] = value
 
 

@@ -1,0 +1,8 @@
+Bug ID,Priority,Module,Issue Type,是否已修复,Expected,Actual,Evidence
+BUG-DEV-20260813-001,P1,Empty Leg,translation_key_exposed,是,"页面显示完整的本地化标题和状态文案","此前多语言页面暴露 emptyLeg.* 翻译 key，中文优惠标题缺失","修复后 global/en-us/zh-cn/zh-hk/zh-tw 共 10 项复测通过"
+BUG-DEV-20260813-002,P0,Fixed Price,required_country_code_not_selected,是,"完整填写必填项后发出过期日期请求并展示单一可关闭弹窗","手机号组件升级为国家区号必选，但脚本仅填写手机号，前端校验拦截提交","已显式选择 China(+86) 后填写本地号码，并等待路由处理器捕获响应；tests/test_v413_requirements_regression.py"
+BUG-DEV-20260813-003,P1,SOS,translation_key_exposed,是,"Nearby 状态筛选和飞机卡片展示正常英文状态","此前页面显示 sos.status.all、sos.status.parked、Sos.Status.Parked 等内部 key","用户截图及 dev 修复后复测证据"
+BUG-DEV-20260813-004,P1,SOS Medical Evacuation,translation_key_exposed,是,"医疗类型、患者状态、陪护需求和补充信息字段显示正常文案","此前弹窗显示 sos.quote.* 内部翻译 key","用户截图及 global/en-us 修复后复测证据"
+AUTO-V414-001,P2,Plan Your Flight,responsive_navigation_locator,是,"桌面和紧凑导航模式均可验证旧 Empty Leg Recommendation 入口已移除","测试环境使用汉堡导航时脚本仍等待桌面 Plan Your Flight 文案，导致超时","已改为直接验证 header DOM 中不存在旧链接，并继续校验三个旧 URL 重定向"
+BUG-V413-009,P1,Fixed Price,expired_date_english_copy_mismatch,否,"英文弹窗标题为 Departure date expired，正文符合最新需求","测试环境英文提示文案与最新需求不一致","tests/test_v413_requirements_regression.py::test_v413_departure_date_expired_english_copy_matches_latest_requirement"
+BUG-DEV-20260814-005,P1,Private Jet Charter,multi_city_four_legs_content_overlap,否,"多程增加到 4 段后页面应随表单高度正常向下重排，搜索按钮和下一内容区互不遮挡","简中页面增加到 4 段后，多程表单向下溢出 Hero 区域并覆盖下一内容区，文字、图片与表单发生层叠","用户截图 2026-08-14；https://dev.jet-bay.com/zh-cn/private-jet-charter；现有 TC-044 仅覆盖 3 段，未覆盖 4 段边界"

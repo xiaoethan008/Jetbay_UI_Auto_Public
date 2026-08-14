@@ -1,0 +1,30 @@
+{
+  "id": "V414-CHAIN-001",
+  "name": "Empty Leg subscription to send record to Book Now",
+  "environment": "test",
+  "locale": "en-us",
+  "minimum_departure_days": 4,
+  "poll": {
+    "interval_seconds": 3,
+    "timeout_seconds": 120
+  },
+  "endpoints": {
+    "empty_leg_list": "emptyLeg/queryPage",
+    "city_query": "data/cityQuery",
+    "subscribe": "web/email-subscription/subscribe/empty-leg",
+    "empty_leg_detail": "emptyLeg/detail"
+  },
+  "book_now": {
+    "path": "/empty-leg",
+    "query": {
+      "subscribed": "1",
+      "emptyLegId": "{{email_empty_leg_id}}"
+    }
+  },
+  "sensitive_variables": [
+    "subscription_email",
+    "email_token",
+    "password",
+    "authorization"
+  ]
+}

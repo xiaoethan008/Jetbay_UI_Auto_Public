@@ -133,8 +133,12 @@ def _load_test_case_rows() -> list[dict]:
     if _TEST_CASE_ROWS is not None:
         return _TEST_CASE_ROWS
 
-    case_path = Path("artifacts") / "测试用例清单.csv"
-    if not case_path.exists():
+    case_paths = (
+        Path("config") / "quality" / "test_case_inventory.csv",
+        Path("artifacts") / "测试用例清单.csv",
+    )
+    case_path = next((path for path in case_paths if path.exists()), None)
+    if case_path is None:
         _TEST_CASE_ROWS = []
         return _TEST_CASE_ROWS
 
@@ -217,6 +221,7 @@ def _failure_category(outcome: str, longrepr: str) -> str:
 
 def _read_issue_list(version: str) -> tuple[Path | None, list[dict]]:
     issue_paths = (
+        Path("config") / "quality" / "issues" / f"官网回归问题清单_{version}.csv",
         Path("artifacts")
         / f"官网{version}（官网回归）"
         / "问题清单"

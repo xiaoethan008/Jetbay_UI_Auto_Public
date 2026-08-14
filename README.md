@@ -163,3 +163,16 @@ pytest -v
 set TEST_ENV=prod
 pytest -v tests/test_login.py -s
 ```
+
+## V4.1.4 API chain pilot
+
+The side-effecting Empty Leg subscription → email send record → Book Now pilot is intentionally excluded from the
+default pytest suite. It is test-only, uses the configured test email/database, and stores a redacted chain report and
+Book Now screenshot under the V4.1.4 temporary artifact directory.
+
+```powershell
+$env:TEST_ENV="test"
+python scripts/run_v414_empty_leg_subscription_chain.py
+```
+
+Use `--headed` only when the Book Now modal needs to be observed interactively.

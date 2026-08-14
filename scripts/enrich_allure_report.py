@@ -35,6 +35,7 @@ def _merge_current_issue_list(data):
     if not version:
         return
     issue_paths = (
+        Path("config") / "quality" / "issues" / f"官网回归问题清单_{version}.csv",
         Path("artifacts")
         / f"官网{version}（官网回归）"
         / "问题清单"

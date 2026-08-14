@@ -204,12 +204,17 @@ def _submit_fixed_price_with_expired_date(page, locale: str = "") -> tuple[dict,
         "Please enter your first name": "V413Regression",
         "Please enter your last name": "ExpiredDate",
         "Please enter your email": "qa+v413-regression@jet-bay.com",
-        "Please enter your phone number": "13800138000",
     }
     for placeholder, value in values.items():
         field = dialog.get_by_placeholder(placeholder, exact=True)
         assert field.count(), f"Fixed Price form is missing field {placeholder!r}"
         field.first.fill(value)
+    phone = dialog.get_by_placeholder("Please enter your phone number", exact=True).first
+    phone.locator("xpath=preceding-sibling::*[@data-slot='trigger']").click()
+    china_code = page.get_by_text("China(+86)", exact=True)
+    china_code.wait_for(state="visible", timeout=10_000)
+    china_code.click()
+    phone.fill("13800138000")
     radios = dialog.locator('input[type="radio"]')
     if radios.count() and not radios.first.is_checked():
         radios.first.check(force=True)
@@ -223,12 +228,13 @@ def _submit_fixed_price_with_expired_date(page, locale: str = "") -> tuple[dict,
         arg=submit_button.element_handle(),
         timeout=5000,
     )
-    with page.expect_response(
-        lambda response: "/lead/" in response.url
-        and response.request.method == "POST",
-        timeout=30_000,
-    ):
-        submit_button.click()
+    submit_button.click()
+    # The route handler is the authoritative observer here. Depending on the
+    # browser version, route.fulfill() may not emit a matching response event.
+    for _ in range(60):
+        if capture.get("response"):
+            break
+        page.wait_for_timeout(500)
     assert capture.get("response"), "Fixed Price lead request was not observed after Submit"
 
     close_button = page.locator("button:visible").filter(has_text="Select new date")

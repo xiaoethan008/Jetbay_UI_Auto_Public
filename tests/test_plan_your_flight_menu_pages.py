@@ -4,7 +4,6 @@ import pytest
 
 from runtime_environments import get_current_environment
 
-from framework.browser_utils import wait_for_render_frames
 from pages.service_menu_page import ServiceMenuPage
 
 
@@ -65,11 +64,10 @@ def test_empty_leg_recommendation_removed_from_plan_your_flight(home_page, page)
     base_url = current_env["base_url"].rstrip("/")
     home_page.open()
 
+    # The environment can render either the desktop navigation or the compact
+    # hamburger header. Do not couple this removal check to one viewport mode.
     header = page.locator("header").first
-    header.get_by_text("Plan Your Flight", exact=True).first.hover()
-    wait_for_render_frames(page)
-
-    assert header.locator("a[href*='empty-leg-recommendation']:visible").count() == 0
+    assert header.locator("a[href*='empty-leg-recommendation']").count() == 0
 
     for legacy_path in LEGACY_EMPTY_LEG_RECOMMENDATION_PATHS:
         legacy_url = urljoin(base_url + "/", legacy_path.lstrip("/"))
