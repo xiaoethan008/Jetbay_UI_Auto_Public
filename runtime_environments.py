@@ -133,6 +133,24 @@ def get_current_environment_name() -> str:
     return os.getenv("TEST_ENV", DEFAULT_ENVIRONMENT).strip().lower() or DEFAULT_ENVIRONMENT
 
 
+def get_sos_api_base_url() -> str:
+    """Return the SOS API host that belongs to the selected UI environment."""
+    override = _get_env("JETBAY_SOS_API_BASE_URL")
+    if override:
+        return _clean_url(override).rstrip("/")
+
+    environment_hosts = {
+        "dev": "https://webdev.jet-bay.com/jetbay-web",
+        "test": "https://webtest.jet-bay.com/jetbay-web",
+    }
+    environment_name = get_current_environment_name()
+    if environment_name not in environment_hosts:
+        raise KeyError(
+            "JETBAY_SOS_API_BASE_URL must be configured when TEST_ENV is not dev or test"
+        )
+    return environment_hosts[environment_name]
+
+
 def get_current_environment() -> dict:
     env_name = get_current_environment_name()
     if env_name not in ENVIRONMENT_DEFAULTS:

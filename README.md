@@ -148,9 +148,10 @@ Built-in proposal route candidates are maintained in `config/search_routes.py`.
 
 - Default environment: `test`
 - Switch environment with `TEST_ENV`
-- GitHub Actions smoke and regression workflows are fixed to
-  `https://test.jet-bay.com/`. They run an environment gate before pytest so
-  the Allure and QA report environment address cannot silently fall back to dev.
+- GitHub Actions smoke is fixed to `https://test.jet-bay.com/`, while the full
+  regression workflow runs against `https://dev.jet-bay.com/`. Both run an
+  environment gate before pytest so the Allure and QA report address cannot
+  silently target a different environment.
 
 Examples:
 

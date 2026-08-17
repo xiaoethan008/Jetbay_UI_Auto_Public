@@ -11,12 +11,12 @@ jobs:
     timeout-minutes: 60
     env:
       HEADLESS: "true"
-      TEST_ENV: test
+      TEST_ENV: dev
       QA_REPORT_VERSION: V4.1.4
-      JETBAY_TEST_BASE_URL: https://test.jet-bay.com/
-      JETBAY_TEST_LOGIN_EMAIL: ${{ secrets.JETBAY_TEST_LOGIN_EMAIL }}
-      JETBAY_TEST_LOGIN_PASSWORD: ${{ secrets.JETBAY_TEST_LOGIN_PASSWORD }}
-      JETBAY_TEST_FORM_EMAIL: ${{ secrets.JETBAY_TEST_FORM_EMAIL }}
+      JETBAY_DEV_BASE_URL: ${{ secrets.JETBAY_DEV_BASE_URL }}
+      JETBAY_DEV_LOGIN_EMAIL: ${{ secrets.JETBAY_TEST_LOGIN_EMAIL }}
+      JETBAY_DEV_LOGIN_PASSWORD: ${{ secrets.JETBAY_TEST_LOGIN_PASSWORD }}
+      JETBAY_DEV_FORM_EMAIL: ${{ secrets.JETBAY_TEST_FORM_EMAIL }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -40,8 +40,12 @@ jobs:
       - name: Install Playwright browser
         run: python -m playwright install --with-deps chromium
 
-      - name: Verify test environment target
-        run: python scripts/verify_ci_test_environment.py --write-github-summary
+      - name: Verify dev environment target
+        run: >-
+          python scripts/verify_ci_test_environment.py
+          --expected-environment dev
+          --expected-base-url "$JETBAY_DEV_BASE_URL"
+          --write-github-summary
 
       - name: Run regression suite
         run: python -m pytest -v -s --alluredir=allure-results

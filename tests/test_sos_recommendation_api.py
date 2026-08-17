@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-import os
 from datetime import date, timedelta
 
 import pytest
 
+from runtime_environments import get_sos_api_base_url
 
-API_BASE_URL = os.getenv("JETBAY_SOS_API_BASE_URL", "https://webdev.jet-bay.com/jetbay-web").rstrip("/")
+
+API_BASE_URL = get_sos_api_base_url()
 
 SEARCH_ROUTES = [
     ("Washington -> New York", "Washington", "US", "New York", "US"),

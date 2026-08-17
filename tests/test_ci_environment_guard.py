@@ -15,6 +15,15 @@ def test_ci_environment_guard_accepts_test_target(monkeypatch):
     )
 
 
+def test_ci_environment_guard_accepts_explicit_dev_target(monkeypatch):
+    monkeypatch.setenv("TEST_ENV", "dev")
+    monkeypatch.setenv("JETBAY_DEV_BASE_URL", "https://dev.jet-bay.com/")
+
+    assert environment_guard.verify_test_environment(
+        "dev", "https://dev.jet-bay.com"
+    ) == ("dev", "https://dev.jet-bay.com")
+
+
 @pytest.mark.parametrize(
     ("environment_name", "target_url"),
     [

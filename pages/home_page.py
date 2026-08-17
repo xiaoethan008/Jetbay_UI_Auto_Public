@@ -331,6 +331,14 @@ class HomePage(BasePage):
         return error.is_visible()
 
     def get_required_location_error_count(self) -> int:
+        try:
+            self.page.wait_for_function(
+                "text => document.body && document.body.innerText.includes(text)",
+                arg=HomePageLocators.SEARCH_REQUIRED_LOCATION_TEXT,
+                timeout=5000,
+            )
+        except PlaywrightTimeoutError:
+            pass
         body_text = self.page.locator("body").inner_text()
         return body_text.count(HomePageLocators.SEARCH_REQUIRED_LOCATION_TEXT)
 

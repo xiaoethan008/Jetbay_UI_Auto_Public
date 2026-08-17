@@ -13,8 +13,8 @@ if str(PROJECT_ROOT) not in sys.path:
 from runtime_environments import get_current_environment, get_current_environment_name
 
 
-EXPECTED_ENVIRONMENT = "test"
-EXPECTED_BASE_URL = "https://test.jet-bay.com"
+DEFAULT_EXPECTED_ENVIRONMENT = "test"
+DEFAULT_EXPECTED_BASE_URL = "https://test.jet-bay.com"
 
 
 def _normalize_url(value: str) -> str:
@@ -22,18 +22,22 @@ def _normalize_url(value: str) -> str:
     return f"{parsed.scheme.lower()}://{parsed.netloc.lower()}{parsed.path.rstrip('/')}"
 
 
-def verify_test_environment() -> tuple[str, str]:
+def verify_test_environment(
+    expected_environment: str = DEFAULT_EXPECTED_ENVIRONMENT,
+    expected_base_url: str = DEFAULT_EXPECTED_BASE_URL,
+) -> tuple[str, str]:
     environment_name = get_current_environment_name()
     base_url = _normalize_url(get_current_environment().get("base_url", ""))
+    normalized_expected_url = _normalize_url(expected_base_url)
 
-    if environment_name != EXPECTED_ENVIRONMENT:
+    if environment_name != expected_environment:
         raise SystemExit(
-            f"CI environment gate failed: expected {EXPECTED_ENVIRONMENT!r}, "
+            f"CI environment gate failed: expected {expected_environment!r}, "
             f"got {environment_name!r}."
         )
-    if base_url != EXPECTED_BASE_URL:
+    if base_url != normalized_expected_url:
         raise SystemExit(
-            f"CI Base URL gate failed: expected {EXPECTED_BASE_URL!r}, got {base_url!r}."
+            f"CI Base URL gate failed: expected {normalized_expected_url!r}, got {base_url!r}."
         )
     return environment_name, base_url
 
@@ -52,12 +56,17 @@ def _write_github_summary(environment_name: str, base_url: str) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Fail CI unless the resolved target is the JETBAY test environment."
+        description="Fail CI unless the resolved target matches the expected JETBAY environment."
     )
+    parser.add_argument("--expected-environment", default=DEFAULT_EXPECTED_ENVIRONMENT)
+    parser.add_argument("--expected-base-url", default=DEFAULT_EXPECTED_BASE_URL)
     parser.add_argument("--write-github-summary", action="store_true")
     args = parser.parse_args()
 
-    environment_name, base_url = verify_test_environment()
+    environment_name, base_url = verify_test_environment(
+        args.expected_environment,
+        args.expected_base_url,
+    )
     print(f"CI test target verified: environment={environment_name}, base_url={base_url}")
     if args.write_github_summary:
         _write_github_summary(environment_name, base_url)

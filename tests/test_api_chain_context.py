@@ -1,5 +1,5 @@
 from framework.api_chain_context import ChainContext, extract_path
-from runtime_environments import _parse_local_env_lines
+from runtime_environments import _parse_local_env_lines, get_sos_api_base_url
 
 
 def test_chain_context_preserves_types_and_renders_nested_templates():
@@ -59,3 +59,18 @@ def test_local_env_duplicate_keys_use_last_definition():
     )
 
     assert parsed["JETBAY_TEST_DB_PASSWORD"] == "new-value"
+
+
+def test_sos_api_base_url_follows_selected_environment(monkeypatch):
+    monkeypatch.delenv("JETBAY_SOS_API_BASE_URL", raising=False)
+    monkeypatch.setenv("TEST_ENV", "test")
+    assert get_sos_api_base_url() == "https://webtest.jet-bay.com/jetbay-web"
+
+    monkeypatch.setenv("TEST_ENV", "dev")
+    assert get_sos_api_base_url() == "https://webdev.jet-bay.com/jetbay-web"
+
+
+def test_sos_api_base_url_honors_explicit_override(monkeypatch):
+    monkeypatch.setenv("TEST_ENV", "test")
+    monkeypatch.setenv("JETBAY_SOS_API_BASE_URL", "https://example.test/jetbay-web/")
+    assert get_sos_api_base_url() == "https://example.test/jetbay-web"

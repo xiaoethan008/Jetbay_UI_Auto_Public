@@ -1,16 +1,19 @@
 from __future__ import annotations
 
 import json
-import os
 from datetime import date, timedelta
 
 import pytest
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
-from runtime_environments import get_current_environment, get_current_environment_name
+from runtime_environments import (
+    get_current_environment,
+    get_current_environment_name,
+    get_sos_api_base_url,
+)
 
 
-API_BASE_URL = os.getenv("JETBAY_SOS_API_BASE_URL", "https://webdev.jet-bay.com/jetbay-web").rstrip("/")
+API_BASE_URL = get_sos_api_base_url()
 EXPIRED_DATE = "2020-01-01"
 
 
