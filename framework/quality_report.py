@@ -48,6 +48,18 @@ def _relative_link(target: str | Path, base_dir: Path) -> str:
 def _module_from_nodeid(nodeid: str) -> str:
     """根据测试文件名给报告补充业务模块，后续也可以改为读取 pytest marker。"""
     lowered = nodeid.lower()
+    v413_rules = [
+        ("test_v413_earliest_departure_date", "Search / Date Validation"),
+        ("test_v413_expired_departure_date", "Search / Date Validation"),
+        ("test_v413_current_earliest_departure_date", "Search / Date Validation"),
+        ("test_v413_sos_search", "SOS"),
+        ("test_v413_fixed_price", "Fixed Price"),
+        ("test_v413_departure_date_expired", "Fixed Price"),
+    ]
+    for keyword, module in v413_rules:
+        if keyword in lowered:
+            return module
+
     v411_rules = [
         ("test_v411_policy_cookie_brand_and_canonical", "Policy / Cookie"),
         ("test_v411_empty_leg_locale_core_sections", "Empty Leg"),
@@ -87,11 +99,22 @@ def _module_from_nodeid(nodeid: str) -> str:
         ("test_round_trip", "Search / Round-Trip"),
         ("test_submit_proposal", "Search / Proposal"),
         ("test_search_same_city", "Search / Validation"),
+        ("test_api_chain_context", "API Chain Infrastructure"),
+        ("test_ci_environment_guard", "CI Environment Guard"),
+        ("test_context_isolation", "Browser Context Isolation"),
+        ("test_locator_health", "Locator Health"),
+        ("test_network_checker", "Network Checker"),
+        ("test_quality_gate", "Quality Gate"),
+        ("test_quality_report", "Quality Reporting"),
+        ("test_trace_lifecycle", "Trace Lifecycle"),
     ]
     for keyword, module in rules:
         if keyword in lowered:
             return module
-    return "Unclassified"
+    test_file = re.search(r"(?:^|/)test_([^/:]+)\.py", lowered.replace("\\", "/"))
+    if test_file:
+        return test_file.group(1).replace("_", " ").title()
+    return "Other Tests"
 
 
 def _priority_from_markers(marker_names: list[str]) -> str:
