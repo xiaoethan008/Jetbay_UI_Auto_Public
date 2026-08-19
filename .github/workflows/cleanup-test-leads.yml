@@ -1,0 +1,57 @@
+name: Cleanup Test Leads
+
+on:
+  schedule:
+    # 03:00 Asia/Shanghai (GitHub Actions cron uses UTC).
+    - cron: "0 19 * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Preview only; do not delete rows
+        required: true
+        default: true
+        type: boolean
+      retention_hours:
+        description: Delete matching leads older than this many hours
+        required: true
+        default: "6"
+        type: string
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      TEST_ENV: test
+      JETBAY_TEST_DB_HOST: ${{ secrets.JETBAY_TEST_DB_HOST }}
+      JETBAY_TEST_DB_PORT: ${{ secrets.JETBAY_TEST_DB_PORT }}
+      JETBAY_TEST_DB_USER: ${{ secrets.JETBAY_TEST_DB_USER }}
+      JETBAY_TEST_DB_PASSWORD: ${{ secrets.JETBAY_TEST_DB_PASSWORD }}
+      JETBAY_TEST_DB_DATABASE: product
+      JETBAY_TEST_DB_CHARSET: ${{ secrets.JETBAY_TEST_DB_CHARSET }}
+      CLEANUP_CONFIRM: DELETE_PRODUCT_CODEX_TEST_LEADS
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install database dependency
+        run: pip install PyMySQL
+
+      - name: Preview scheduled cleanup
+        run: >-
+          python scripts/cleanup_product_test_leads.py
+          --retention-hours "${{ inputs.retention_hours || '6' }}"
+
+      - name: Apply scheduled cleanup
+        if: github.event_name == 'schedule' || inputs.dry_run == false
+        run: >-
+          python scripts/cleanup_product_test_leads.py
+          --retention-hours "${{ inputs.retention_hours || '6' }}"
+          --apply

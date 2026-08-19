@@ -1,0 +1,4 @@
+Bug ID,Priority,Module,Issue Type,是否已修复,Expected,Actual,Evidence
+BUG-PROD-20260818-006,P0,Destination,city_list_null_pointer_on_invalid_or_incomplete_request,否,"Destination 城市列表接口对缺失参数或不存在的 slug 返回明确的参数错误/空结果，不产生服务端异常","生产环境 /web/destination/city/list 在 pageCityList 中触发 message 为空的异常，9 分钟告警 103 次；源码确认 similar 自动拆箱和 destination 解引用均缺少判空","生产告警 2026-08-18 13:02:14~13:11:14；requestId=d4e018cf-2a01-4539-84ac-e28c1a72dda5；prod image commit=ed1aae4f"
+BUG-V413-009,P1,Fixed Price,expired_date_english_copy_mismatch,否,"英文弹窗标题为 Departure date expired，正文符合最新需求","测试环境英文提示文案与最新需求不一致","tests/test_v413_requirements_regression.py::test_v413_departure_date_expired_english_copy_matches_latest_requirement"
+BUG-DEV-20260814-005,P1,Private Jet Charter,multi_city_four_legs_content_overlap,否,"多程增加到 4 段后页面应随表单高度正常向下重排，搜索按钮和下一内容区互不遮挡","简中页面增加到 4 段后，多程表单向下溢出 Hero 区域并覆盖下一内容区，文字、图片与表单发生层叠","用户截图 2026-08-14；https://dev.jet-bay.com/zh-cn/private-jet-charter；现有 TC-044 仅覆盖 3 段，未覆盖 4 段边界"
