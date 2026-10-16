@@ -123,12 +123,16 @@ def browser(playwright):
 
 
 @pytest.fixture(scope="session", autouse=True)
-def allure_environment_metadata():
+def allure_environment_metadata(request):
+    results_dir = request.config.getoption("allure_report_dir", default=None)
+    if not results_dir:
+        return
     write_allure_environment(
         environment_name=get_current_environment_name(),
         environment_config=get_current_environment(),
+        results_dir=results_dir,
     )
-    write_allure_executor()
+    write_allure_executor(results_dir=results_dir)
 
 
 @pytest.fixture(scope="function")

@@ -779,7 +779,7 @@ def inject_summary(index_path: Path, summary_html: str):
 
 def main():
     parser = argparse.ArgumentParser(description="Inject a management summary into Allure index.html.")
-    parser.add_argument("--report-dir", default="allure-report")
+    parser.add_argument("--report-dir", default="artifacts/reports/allure-report")
     parser.add_argument("--quality-root", default="artifacts/reports")
     args = parser.parse_args()
 

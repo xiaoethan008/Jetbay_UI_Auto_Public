@@ -29,7 +29,7 @@ def parse_args():
     )
     parser.add_argument(
         "--output-dir",
-        default="artifacts",
+        default="artifacts/临时文件/news-comparison",
         help="Directory for output files.",
     )
     parser.add_argument(

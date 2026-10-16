@@ -47,7 +47,7 @@ set TEST_ENV=prod
 python scripts/trace_search_requests.py --headless --refresh-results-page --exercise-query-tabs
 ```
 
-The script records `createSearchId`, `getSearchId`, and `searchList` requests, prints a compact summary in the terminal, and writes the full trace JSON into `artifacts/`.
+The script records `createSearchId`, `getSearchId`, and `searchList` requests, prints a compact summary in the terminal, and writes the full trace JSON into `artifacts/临时文件/search-traces/`.
 
 ## CI/CD
 
@@ -102,16 +102,20 @@ Repository -> Settings -> Pages -> Build and deployment -> Source = GitHub Actio
    ```
 4. Or run the steps manually:
    ```sh
-   pytest --alluredir=allure-results
+   pytest --alluredir=artifacts/reports/allure-results
    powershell -ExecutionPolicy Bypass -File .\generate_allure_report.ps1
    ```
 5. Or generate / open the report directly with Allure CLI:
    ```sh
-   allure serve allure-results
+   allure serve artifacts/reports/allure-results
    ```
 
 If Allure is enabled, failed test screenshots will also be attached to the Allure report.
 To keep the `Trend` chart across runs and avoid duplicate test entries in a single report, prefer `run_allure_report.ps1`, because it clears the current `allure-results`, restores the previous `history`, runs pytest, and then generates a fresh report.
+
+Local scripts and CI store Allure results and HTML under `artifacts/reports/allure-results/` and `artifacts/reports/allure-report/`. Metadata follows the supplied `--alluredir`; a run without Allure does not create an Allure directory. Product versions use `artifacts/官网Vx.x.x（需求主题）/`; diagnostic labels such as `DEV-AUTOMATION` go under `artifacts/临时文件/执行记录/`. Cross-version runs and recovery markers use `artifacts/临时文件/官网回归/`.
+
+Run `python scripts/check_artifact_layout.py` to check both the project root and the artifact root. The default regression and CI also check this layout. Historical evidence moved on 2026-10-16 can be located through `artifacts/临时文件/目录整理_20261016/路径迁移索引.csv`.
 
 ## QA Quality Reports
 
@@ -139,7 +143,7 @@ When a new website test version starts, update `QA_REPORT_VERSION` and the defau
 
 If a matching issue list exists at `artifacts/问题清单/官网回归问题清单_<version>.csv`, the quality report will merge its fixed/unfixed status into the summary.
 
-The GitHub Actions workflow also injects this quality data into the top of `allure-report/index.html` before uploading and deploying the Allure report. The WeCom screenshot therefore still captures Allure, but the first screen becomes a management summary with pass rate, failed/skipped counts, open issue count, top failed cases, and open issues.
+The GitHub Actions workflow also injects this quality data into the top of `artifacts/reports/allure-report/index.html` before uploading and deploying the Allure report. The WeCom screenshot therefore still captures Allure, but the first screen becomes a management summary with pass rate, failed/skipped counts, open issue count, top failed cases, and open issues.
 
 ## Environments
 

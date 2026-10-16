@@ -82,7 +82,7 @@ def parse_args():
     parser.add_argument(
         "--output",
         default="",
-        help="Optional JSON output path. Defaults to artifacts/search_trace_<timestamp>.json.",
+        help="Optional JSON output path. Defaults to artifacts/临时文件/search-traces/search_trace_<timestamp>.json.",
     )
     return parser.parse_args()
 
@@ -208,7 +208,7 @@ def safe_frame_url(request) -> str:
 
 def default_output_path() -> Path:
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    return Path("artifacts") / f"search_trace_{timestamp}.json"
+    return Path("artifacts") / "临时文件" / "search-traces" / f"search_trace_{timestamp}.json"
 
 
 def ensure_parent(path: Path):

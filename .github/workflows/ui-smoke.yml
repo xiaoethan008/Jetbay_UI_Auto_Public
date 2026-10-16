@@ -45,14 +45,18 @@ jobs:
           --write-github-summary
 
       - name: Run smoke test
-        run: python -m pytest -v -s tests/test_login.py --alluredir=allure-results
+        run: python -m pytest -v -s tests/test_login.py --alluredir=artifacts/reports/allure-results
+
+      - name: Check execution artifact layout
+        if: always()
+        run: python scripts/check_artifact_layout.py
 
       - name: Upload Allure results
         if: always()
         uses: actions/upload-artifact@v6
         with:
           name: allure-results-smoke
-          path: allure-results
+          path: artifacts/reports/allure-results
           if-no-files-found: ignore
 
       - name: Upload failure screenshots

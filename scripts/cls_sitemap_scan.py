@@ -9,7 +9,7 @@ from pathlib import Path
 from playwright.async_api import async_playwright
 
 
-ARTIFACT_DIR = Path("artifacts")
+ARTIFACT_DIR = Path("artifacts") / "临时文件" / "cls-sitemap"
 SITEMAP_ROOT = "https://www.jet-bay.com/sitemap.xml"
 
 ERROR_PAGE_RE = re.compile(
@@ -170,7 +170,7 @@ def classify(result: dict) -> str:
 
 
 async def run_scan(args):
-    ARTIFACT_DIR.mkdir(exist_ok=True)
+    ARTIFACT_DIR.mkdir(parents=True, exist_ok=True)
     ts = args.run_id or time.strftime("%Y%m%d_%H%M%S")
     jsonl_path = ARTIFACT_DIR / f"cls_sitemap_{args.viewport}_{ts}.jsonl"
     summary_path = ARTIFACT_DIR / f"cls_sitemap_{args.viewport}_{ts}_summary.json"

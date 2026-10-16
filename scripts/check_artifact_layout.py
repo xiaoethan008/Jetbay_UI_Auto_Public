@@ -13,6 +13,8 @@ VERSION_DIR_PATTERN = re.compile(r"^官网V\d+(?:\.\d+)*(?:（.+）)?$")
 
 
 def find_invalid_entries(artifacts: Path) -> list[Path]:
+    if not artifacts.exists():
+        return []
     invalid: list[Path] = []
     for child in artifacts.iterdir():
         if child.is_file():
@@ -28,17 +30,22 @@ def find_invalid_entries(artifacts: Path) -> list[Path]:
     return invalid
 
 
-def main() -> int:
-    if not ARTIFACTS.exists():
-        return 0
+def find_project_root_outputs(root: Path) -> list[Path]:
+    """Execution output belongs under artifacts, including historical Allure runs."""
+    return sorted(path for path in root.iterdir() if path.is_dir() and (
+        path.name in {"screenshots", "prod_chunks"}
+        or re.fullmatch(r"allure-(?:results|report)(?:-.+)?", path.name)
+    ))
 
-    invalid = find_invalid_entries(ARTIFACTS)
+
+def main() -> int:
+    invalid = find_invalid_entries(ARTIFACTS) + find_project_root_outputs(ROOT)
 
     if not invalid:
         print("artifact layout: OK")
         return 0
 
-    print("artifact layout: unexpected entry at artifacts root", file=sys.stderr)
+    print("artifact layout: execution output is outside the documented layout", file=sys.stderr)
     for path in invalid:
         print(f"- {path.relative_to(ROOT)}", file=sys.stderr)
     print(

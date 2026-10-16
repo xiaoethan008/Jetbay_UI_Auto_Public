@@ -1,14 +1,23 @@
 param(
-    [string]$ResultsDir = ".\allure-results",
-    [string]$ReportDir = ".\allure-report",
+    [string]$ResultsDir = ".\artifacts\reports\allure-results",
+    [string]$ReportDir = ".\artifacts\reports\allure-report",
     [switch]$Headless
 )
 
 $ErrorActionPreference = "Stop"
 
 $projectRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
-$resultsPath = Join-Path $projectRoot $ResultsDir
-$reportPath = Join-Path $projectRoot $ReportDir
+$resultsPath = if ([IO.Path]::IsPathRooted($ResultsDir)) { $ResultsDir } else { Join-Path $projectRoot $ResultsDir }
+$reportPath = if ([IO.Path]::IsPathRooted($ReportDir)) { $ReportDir } else { Join-Path $projectRoot $ReportDir }
+
+# These directories are recursively cleaned below. Check their absolute paths first.
+$workspacePrefix = [IO.Path]::GetFullPath($projectRoot).TrimEnd('\') + '\'
+foreach ($outputPath in @($resultsPath, $reportPath)) {
+    $resolvedOutputPath = [IO.Path]::GetFullPath($outputPath)
+    if (-not $resolvedOutputPath.StartsWith($workspacePrefix, [StringComparison]::OrdinalIgnoreCase)) {
+        throw "Allure output must stay inside the project workspace: $resolvedOutputPath"
+    }
+}
 $resultsHistoryPath = Join-Path $resultsPath "history"
 $reportHistoryPath = Join-Path $reportPath "history"
 

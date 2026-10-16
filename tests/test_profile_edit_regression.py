@@ -78,7 +78,7 @@ def test_profile_edit_persists_and_restores(page, case_evidence, case_id):
     read = profile_reader(page)
     baseline = read()
     assert baseline['firstName'] and baseline['lastName'], 'A restorable first/last name baseline is required'
-    pending = Path('artifacts/profile-state') / (env + '-name-edit.json')
+    pending = Path('artifacts/临时文件/官网回归/profile-state') / (env + '-name-edit.json')
     if pending.exists():
         original = json.loads(pending.read_text(encoding='utf-8'))
         assert baseline == original, f'Previous name edit remains unrestored; inspect {pending}'

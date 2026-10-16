@@ -15,7 +15,7 @@ from runtime_environments import get_current_environment_name
 def case_evidence(request):
     env = get_current_environment_name()
     configured = os.environ.get('WEBSITE_GAPS_RUN')
-    root = Path(configured) if configured else Path('artifacts/website-case-runs') / datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')
+    root = Path(configured) if configured else Path('artifacts/临时文件/官网回归/website-case-runs') / datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')
     module = request.path.stem
     suffix = hashlib.sha256(request.node.nodeid.encode()).hexdigest()[:12] + '-' + uuid4().hex[:8]
     journal = ExplorationJournal.create(root / 'case-evidence' / env / module / suffix, environment=env, module=module)

@@ -387,7 +387,7 @@ async def main():
     args = parser.parse_args()
 
     base_url = normalize_base_url(args.base_url)
-    output_dir = Path("artifacts") / "问题清单"
+    output_dir = Path("artifacts") / "临时文件" / "content-heading-styles"
     date_suffix = datetime.now().strftime("%Y%m%d")
 
     async with async_playwright() as p:

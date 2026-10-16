@@ -69,7 +69,7 @@ def owned_subscription(page,subscription_access,case_evidence):
         if (dep,arr) not in keys:
             selected={'depCityId':dep,'arrCityId':arr,'depAirportId':'','arrAirportId':''};break
     if selected is None:pytest.skip('SUBSCRIPTION_FIXTURE_MISSING: all bounded candidate routes are already active; existing routes will not be changed')
-    marker=Path('artifacts/subscription-state')/(get_current_environment_name()+'-owned-route.json')
+    marker=Path('artifacts/临时文件/官网回归/subscription-state')/(get_current_environment_name()+'-owned-route.json')
     if marker.exists():
         previous=json.loads(marker.read_text(encoding='utf-8'))
         assert snapshot(access.read())==previous['baseline'], f'Previous subscription operation is unrestored; inspect {marker}'

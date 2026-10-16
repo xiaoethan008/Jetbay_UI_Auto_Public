@@ -48,7 +48,11 @@ jobs:
           --write-github-summary
 
       - name: Run regression suite
-        run: python -m pytest -v -s --alluredir=allure-results
+        run: python -m pytest -v -s --alluredir=artifacts/reports/allure-results
+
+      - name: Check execution artifact layout
+        if: always()
+        run: python scripts/check_artifact_layout.py
 
       - name: Generate UI automation blueprint
         if: always()
@@ -60,19 +64,19 @@ jobs:
 
       - name: Generate Allure report
         if: always()
-        run: allure generate allure-results -o allure-report --clean
+        run: allure generate artifacts/reports/allure-results -o artifacts/reports/allure-report --clean
 
       - name: Enrich Allure report for management
         if: always()
         continue-on-error: true
-        run: python scripts/enrich_allure_report.py --report-dir allure-report --quality-root artifacts/reports
+        run: python scripts/enrich_allure_report.py --report-dir artifacts/reports/allure-report --quality-root artifacts/reports
 
       - name: Upload Allure results
         if: always()
         uses: actions/upload-artifact@v6
         with:
           name: allure-results-regression
-          path: allure-results
+          path: artifacts/reports/allure-results
           if-no-files-found: ignore
 
       - name: Upload failure screenshots
@@ -80,7 +84,7 @@ jobs:
         uses: actions/upload-artifact@v6
         with:
           name: screenshots-regression
-          path: screenshots
+          path: artifacts/**/screenshots/**
           if-no-files-found: ignore
 
       - name: Upload QA quality reports
@@ -88,7 +92,10 @@ jobs:
         uses: actions/upload-artifact@v6
         with:
           name: quality-reports-regression
-          path: artifacts/reports
+          path: |
+            artifacts/reports
+            !artifacts/reports/allure-results/**
+            !artifacts/reports/allure-report/**
           if-no-files-found: ignore
 
       - name: Upload Allure HTML report
@@ -96,14 +103,14 @@ jobs:
         uses: actions/upload-artifact@v6
         with:
           name: allure-report-regression
-          path: allure-report
+          path: artifacts/reports/allure-report
           if-no-files-found: ignore
 
       - name: Upload Pages artifact
         if: always() && github.ref == 'refs/heads/main'
         uses: actions/upload-pages-artifact@v3
         with:
-          path: allure-report
+          path: artifacts/reports/allure-report
 
   deploy-report:
     if: always() && github.ref == 'refs/heads/main'
@@ -133,7 +140,7 @@ jobs:
         uses: actions/download-artifact@v6
         with:
           name: allure-report-regression
-          path: allure-report
+          path: artifacts/reports/allure-report
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -158,8 +165,8 @@ jobs:
 
           from playwright.sync_api import sync_playwright
 
-          screenshot_path = pathlib.Path("report-overview.png")
-          report_dir = pathlib.Path("allure-report")
+          screenshot_path = pathlib.Path("artifacts/reports/report-overview.png")
+          report_dir = pathlib.Path("artifacts/reports/allure-report")
           report_file = report_dir / "index.html"
           report_url = "http://127.0.0.1:8123/index.html"
 
@@ -190,7 +197,7 @@ jobs:
       - name: Send WeCom notification
         env:
           WECOM_WEBHOOK_URL: ${{ secrets.WECOM_WEBHOOK_URL }}
-          SCREENSHOT_PATH: report-overview.png
+          SCREENSHOT_PATH: artifacts/reports/report-overview.png
         run: |
           python - <<'PY'
           import base64

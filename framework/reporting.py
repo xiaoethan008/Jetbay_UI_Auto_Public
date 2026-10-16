@@ -18,6 +18,9 @@ TRACE_STOPPED_FLAG = "_trace_stopped"
 
 def _version_failure_artifact_dir(kind: str) -> Path:
     version = os.getenv("QA_REPORT_VERSION", "V4.1.4").strip() or "V4.1.4"
+    if not re.fullmatch(r"V\d+(?:\.\d+)*", version):
+        # A run label is not a product version. Keep diagnostic runs together.
+        return Path("artifacts") / "临时文件" / "执行记录" / _safe_artifact_name(version) / kind
     version_candidates = list(Path("artifacts").glob(f"官网{version}（*"))
     if version_candidates:
         # 同版本存在历史残缺目录时，优先选择名称最完整的版本目录。
@@ -27,9 +30,9 @@ def _version_failure_artifact_dir(kind: str) -> Path:
     return version_root / "临时文件" / "framework_failure_artifacts" / kind
 
 
-def write_allure_environment(environment_name: str, environment_config: dict):
+def write_allure_environment(environment_name: str, environment_config: dict, *, results_dir=None):
     """写入 Allure environment.properties。"""
-    allure_results_dir = Path("allure-results")
+    allure_results_dir = Path(results_dir) if results_dir is not None else Path("artifacts/reports/allure-results")
     allure_results_dir.mkdir(parents=True, exist_ok=True)
 
     database_config = environment_config.get("database", {})
@@ -46,9 +49,9 @@ def write_allure_environment(environment_name: str, environment_config: dict):
     )
 
 
-def write_allure_executor(executor_name: str = "Local", executor_type: str = "local"):
+def write_allure_executor(executor_name: str = "Local", executor_type: str = "local", *, results_dir=None):
     """写入 Allure executor.json。"""
-    allure_results_dir = Path("allure-results")
+    allure_results_dir = Path(results_dir) if results_dir is not None else Path("artifacts/reports/allure-results")
     allure_results_dir.mkdir(parents=True, exist_ok=True)
 
     payload = {

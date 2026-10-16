@@ -13,7 +13,7 @@ from playwright.sync_api import sync_playwright
 
 
 URL = "https://dev.jet-bay.com/private-jet-charter"
-OUT_DIR = Path("artifacts")
+OUT_DIR = Path("artifacts") / "临时文件" / "popular-aircraft"
 
 UI_TO_LOCALE = {
     "United States": "en-us",

@@ -18,7 +18,7 @@ NS = {
 }
 
 URL = "https://dev.jet-bay.com/private-jet-charter"
-OUT_DIR = Path("artifacts")
+OUT_DIR = Path("artifacts") / "临时文件" / "popular-aircraft"
 
 UI_TO_HREFLANG = {
     "United States": ".com/en-us",

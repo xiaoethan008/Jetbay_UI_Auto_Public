@@ -649,7 +649,7 @@ def main():
     args = parser.parse_args()
 
     base_url = clean_base_url(args.base_url)
-    output_dir = Path(args.output_dir) if args.output_dir else Path("artifacts") / "\u95ee\u9898\u6e05\u5355"
+    output_dir = Path(args.output_dir) if args.output_dir else Path("artifacts") / "临时文件" / "seo-scan"
 
     records: list[dict] = []
     redirect_records: list[dict] = []

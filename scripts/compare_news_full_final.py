@@ -31,7 +31,7 @@ def parse_args():
     )
     parser.add_argument(
         "--output-csv",
-        default=r"artifacts\news_final_issue_summary.csv",
+        default="artifacts/临时文件/news-comparison/news_final_issue_summary.csv",
         help="Final CSV output path.",
     )
     parser.add_argument("--headless", action="store_true", help="Run Playwright in headless mode.")

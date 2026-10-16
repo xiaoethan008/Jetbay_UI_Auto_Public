@@ -171,7 +171,7 @@ def _load_test_case_rows() -> list[dict]:
 
     case_paths = (
         Path("config") / "quality" / "test_case_inventory.csv",
-        Path("artifacts") / "测试用例清单.csv",
+        Path("artifacts/临时文件/官网回归/清单导出/测试用例清单.csv"),
     )
     case_path = next((path for path in case_paths if path.exists()), None)
     if case_path is None:
