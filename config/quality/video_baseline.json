@@ -1,0 +1,180 @@
+{
+  "source": "artifacts/官网V4.1.5（Video页面）/需求文档/Video Centre 视频中心.xlsx",
+  "source_sha256": "bd93f92c02b3eda3e29939a678fd6caf9de8670290708b76239c20a79146ebc9",
+  "groups": {
+    "Featured": [
+      {
+        "title": "Branding Video",
+        "video_id": "P0gG8soWcbw"
+      }
+    ],
+    "Newest": [
+      {
+        "title": "Celebrating 5 Years of Jetbay",
+        "video_id": "aXN5L-UCzPY"
+      },
+      {
+        "title": "Pet Charter Travel with JETBAY 🐾🛩️ | Flying with Pets on Private Jets",
+        "video_id": "uGr-cRhHZb0"
+      },
+      {
+        "title": "What’s it like to fly on a $45 million Gulfstream GV private jet?",
+        "video_id": "AAjtm0UgWTM"
+      }
+    ],
+    "Jet Tours": [
+      {
+        "title": "Flying in a $60M Gulfstream G550",
+        "video_id": "pSVZxUqlQ24"
+      },
+      {
+        "title": "Inside the Ultimate Private Jet: Bombardier Global 7500 Walkthrough",
+        "video_id": "mFAqOkY5Hqk"
+      },
+      {
+        "title": "A Private Jet for $2 Million? | Cessna Citation Mustang Tour 🛩️",
+        "video_id": "Ymxn4FF6nkY"
+      },
+      {
+        "title": "HondaJet Elite II | Redefining the Future of Light Jet Travel",
+        "video_id": "u8fNuv3gtAw"
+      }
+    ],
+    "Educational Videos": [
+      {
+        "title": "Is Flying Private Really That Different From Commercial?",
+        "video_id": "GMt8yZ7N5FY"
+      },
+      {
+        "title": "Booking a private jet is as EASY as a booking a hotel",
+        "video_id": "EynZHEkqRUI"
+      },
+      {
+        "title": "$5,000 Private Jets, Celebrity Flyers & the Truth About Jet Cards",
+        "video_id": "qWXsGASibLU"
+      },
+      {
+        "title": "Private Jet Costs, Booking Tips & the ‘Empty Leg’ Hack",
+        "video_id": "QlE6igS1SDA"
+      }
+    ],
+    "Interviews": [
+      {
+        "title": "Westlife Jakarta Concert 2026 | 25th Anniversary Tour Exclusive Interview",
+        "video_id": "W37SpMfO3tU"
+      },
+      {
+        "title": "Inside a 50-Year Career in Aviation | Interview with Herb Chahal",
+        "video_id": "EdejBxc7GZc"
+      },
+      {
+        "title": "How Her Lifelong Passion for Aviation Continues",
+        "video_id": "wn6UHflOEdQ"
+      },
+      {
+        "title": "Nilesh Pattanayak Reveals Bombardier’s Innovations and His Aviation Journey",
+        "video_id": "WVop3eZZhMU"
+      }
+    ],
+    "Facilities Tour": [
+      {
+        "title": "Inside the Largest OEM Business Aviation Maintenance Facility in Asia-Pacific",
+        "video_id": "LLF6f2cUaok"
+      },
+      {
+        "title": "Exclusive Inside Look at MJets's Award-Winning Private Jet Terminal",
+        "video_id": "2lVGQqb1gc4"
+      },
+      {
+        "title": "Private Jets & A Salad Wall?! | Air 7 Asia Private Aviation Facility Tour",
+        "video_id": "7L9Xq3wHYEQ"
+      },
+      {
+        "title": "Exclusive Tour of Asia’s 1st Integrated Private Aviation Service Provider",
+        "video_id": "LaLX-GGqJ1U"
+      }
+    ],
+    "Quick-fire Questions": [
+      {
+        "title": "Shortest Flight Ever?! Here's What Private Jet Pilots Actually Do",
+        "video_id": "0mL93GJDLXE"
+      },
+      {
+        "title": "Air 7 Asia' Director of Customer Service",
+        "video_id": "OOhn79RUnbs"
+      },
+      {
+        "title": "Inside the World of Private Jets | Quick-Fire with MJets’ CCO Chayanin Max Sukkhasantikul",
+        "video_id": "L_p3UlYuCzg"
+      },
+      {
+        "title": "WingsOverAsia Founder on Aircraft Ownership and Cost of Flying Private in Singapore",
+        "video_id": "HVy57FgO21g"
+      }
+    ],
+    "Event Highlights": [
+      {
+        "title": "Inside Asia’s Biggest Airshow | Singapore Airshow 2026",
+        "video_id": "zbOkvSuD8_U"
+      },
+      {
+        "title": "Inside the $100 Million Airbus Corporate Jet ACJ318 Elite | Exclusive Private Viewing",
+        "video_id": "IamKliPulps"
+      },
+      {
+        "title": "Inside the World’s Most Powerful Business Aviation Event | NBAA-BACE 2025 Highlights",
+        "video_id": "URib8_l7iLo"
+      },
+      {
+        "title": "The Future of Business Aviation | CJI Asia 2025",
+        "video_id": "niIqzGgaoTw"
+      }
+    ]
+  },
+  "home": {
+    "global": [
+      "P0gG8soWcbw",
+      "aXN5L-UCzPY"
+    ],
+    "en-us": [
+      "P0gG8soWcbw",
+      "URib8_l7iLo"
+    ],
+    "en-sg": [
+      "P0gG8soWcbw",
+      "zbOkvSuD8_U"
+    ],
+    "en-gb": [
+      "P0gG8soWcbw",
+      "aXN5L-UCzPY"
+    ],
+    "en-ca": [
+      "P0gG8soWcbw",
+      "aXN5L-UCzPY"
+    ],
+    "en-id": [
+      "P0gG8soWcbw",
+      "QD9PX3bAPQI"
+    ],
+    "en-hk": [
+      "P0gG8soWcbw",
+      "aXN5L-UCzPY"
+    ],
+    "en-ae": [
+      "P0gG8soWcbw",
+      "aXN5L-UCzPY"
+    ],
+    "zh-cn": [
+      "P0gG8soWcbw",
+      "Efwk7fPf26c"
+    ],
+    "zh-tw": [
+      "P0gG8soWcbw",
+      "aXN5L-UCzPY"
+    ],
+    "zh-hk": [
+      "P0gG8soWcbw",
+      "aXN5L-UCzPY"
+    ]
+  }
+}

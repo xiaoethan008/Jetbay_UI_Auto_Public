@@ -47,11 +47,12 @@ class HomePageLocators:
         "Log In",
         "Contact Us",
     )
-    HERO_BANNER_LINK = "main a[href='https://www.jet-bay.com']:visible"
-    HERO_BANNER_IMAGE = "main img[src*='bannerConfig']:visible"
-    HERO_BANNER_TARGET_URL = "https://www.jet-bay.com"
+    HERO_BANNER_SECTION = "main section:has(button[aria-label='Show banner 1'])"
+    HERO_BANNER_LINK = "a[href][aria-label]"
+    HERO_BANNER_IMAGE = "picture img"
 
-    POPULAR_ROUTES_SECTION_LINK_TEXT = "View All Fixed-Price Routes"
+    POPULAR_ROUTES_SECTION_TITLE = "Fixed-Price Private Jet Routes"
+    POPULAR_ROUTES_SECTION_LINK_TEXT = "View all fixed-price routes"
     POPULAR_ROUTE_LINKS = "a[href*='/fixed-price-charter/']:visible"
     POPULAR_ROUTE_DETAIL_TEXT = "Fixed Pricing by Aircraft Category"
 
@@ -87,10 +88,12 @@ class HomePageLocators:
     TRAVEL_CREDIT_MORE_BUTTON_TEXT = "Need assistance? Contact our support team for more details. Need help? Contact support."
     TRAVEL_CREDIT_PATH = "/travel-credit"
 
-    EMPTY_LEG_SECTION_TITLES = ("Empty Leg Near You", "Empty Legs Near You")
+    EMPTY_LEG_SECTION_TITLES = (
+        "Empty leg flights near you", "Empty Leg Near You", "Empty Legs Near You",
+    )
     EMPTY_LEG_CARD_IMAGES = "img[alt='emptyLeg']"
     EMPTY_LEG_ROUTE_CARDS = "div.flex-shrink-0.snap-start"
-    EMPTY_LEG_BOOK_BUTTON_TEXT = "Book"
+    EMPTY_LEG_BOOK_BUTTON_TEXT = "Book Now"
     EMPTY_LEG_PRICE_PATTERN = r"USD\s*[\d,]+"
     EMPTY_LEG_ALERT_EMAIL = "input[type='email'][aria-label='Enter your email to receive alerts']"
     EMPTY_LEG_DIALOG_TITLE = "Book an Empty Leg Flight"

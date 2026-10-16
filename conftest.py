@@ -20,7 +20,7 @@ from pages.home_page import HomePage
 
 from runtime_environments import get_current_environment, get_current_environment_name
 
-SEO_TEST_FILES = {"test_404_seo.py"}
+SEO_TEST_FILES = {"test_404_seo.py", "test_global_meta_regression.py"}
 SEO_SKIP_ENVIRONMENTS = {"dev", "test"}
 MANUAL_DEBUG_TEST_FILES = {"test_inspect.py"}
 

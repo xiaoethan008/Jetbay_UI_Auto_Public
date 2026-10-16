@@ -3,3 +3,4 @@ allure-pytest
 playwright
 pytest-playwright
 PyMySQL
+tzdata==2026.5

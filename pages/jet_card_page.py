@@ -9,7 +9,7 @@ class JetCardPage(BasePage):
         self.wait_for_path(JetCardPageLocators.PATH)
 
     def wait_for_thank_you_page(self):
-        self.wait_for_path(JetCardPageLocators.THANK_YOU_PATH)
+        self.wait_for_path(JetCardPageLocators.THANK_YOU_PATH, exact=True)
 
     def wait_for_form(self):
         # 页面还有第三方埋点 form，仅等待 Jet Card 自身表单。

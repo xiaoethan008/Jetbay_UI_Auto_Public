@@ -1,4 +1,4 @@
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlsplit
 import re
 
 from config.search_routes import SEARCHABLE_CITY_PAIRS, SEARCHABLE_MULTI_CITY_ROUTES
@@ -19,15 +19,30 @@ class HomePage(BasePage):
             raise AssertionError(
                 "Invalid base_url for test environment. Check JETBAY_TEST_BASE_URL in GitHub Secrets."
             )
-        self.goto(base_url)
-        self.page.locator("header").get_by_role(
-            "button", name=HomePageLocators.LOGIN_BUTTON_TEXT
-        ).wait_for(
+        # This regression page object asserts English copy throughout. Make its
+        # locale explicit instead of depending on IP-based homepage redirects.
+        home_url = base_url
+        if not urlsplit(base_url).path.strip('/'):
+            home_url = urljoin(base_url.rstrip('/') + '/', 'en-us')
+        locale_match = re.match(r'^/([a-z]{2}-[a-z]{2})(?:/|$)', urlsplit(home_url).path, re.I)
+        self._requested_site_prefix = '/' + locale_match.group(1) if locale_match else ''
+        self.goto(home_url)
+        # Mobile headers can hide the desktop login entry; the visible logo is
+        # the common readiness marker for both layouts and login states.
+        self.page.locator("header img[alt='logo']:visible").first.wait_for(
             state="visible", timeout=15000
         )
 
     def _get_base_url(self) -> str:
         return get_current_environment()["base_url"].rstrip("/")
+
+    def get_requested_site_prefix(self) -> str:
+        return getattr(self, '_requested_site_prefix', '')
+
+    def _without_requested_site_prefix(self, href: str) -> str:
+        path = urlsplit(href).path
+        prefix = self.get_requested_site_prefix()
+        return path[len(prefix):] if prefix and path.startswith(prefix + '/') else path
 
     def _goto_path(self, path: str):
         self.goto(urljoin(self._get_base_url() + "/", path.lstrip("/")))
@@ -136,9 +151,11 @@ class HomePage(BasePage):
 
     def select_trip_type(self, trip_type_text: str):
         print(f"\n[search] trip type: {trip_type_text}")
-        self._get_search_region().get_by_role(
+        button = self._get_search_region().get_by_role(
             "button", name=trip_type_text, exact=True
-        ).click()
+        )
+        from framework.website_regression import hydrated_click
+        hydrated_click(button)
         wait_for_render_frames(self.page)
 
     def _get_search_form(self):
@@ -148,10 +165,10 @@ class HomePage(BasePage):
                 "|".join(re.escape(text) for text in HomePageLocators.SEARCH_BUTTON_TEXT_OPTIONS),
                 re.IGNORECASE,
             ),
-        )
+        ).filter(visible=True)
         return self.page.locator("form").filter(
             has=self.page.get_by_role("combobox")
-        ).filter(has=search_button)
+        ).filter(has=search_button).filter(visible=True)
 
     def _get_search_region(self):
         search_button = self.page.get_by_role(
@@ -160,10 +177,10 @@ class HomePage(BasePage):
                 "|".join(re.escape(text) for text in HomePageLocators.SEARCH_BUTTON_TEXT_OPTIONS),
                 re.IGNORECASE,
             ),
-        )
+        ).filter(visible=True)
         return self.page.locator("section").filter(
             has=self.page.get_by_role("combobox")
-        ).filter(has=search_button)
+        ).filter(has=search_button).filter(visible=True)
 
     def _get_airport_input(self, index: int):
         return self._get_search_form().get_by_role("combobox").nth(index)
@@ -522,7 +539,7 @@ class HomePage(BasePage):
     def open_user_menu(self):
         trigger = self.page.locator("header img[alt='avatar']:visible").first
         trigger.wait_for(state="visible", timeout=15000)
-        trigger.click(force=True)
+        trigger.click()
         self.page.locator("[role='menu']:visible").first.wait_for(state="visible", timeout=10000)
 
     def get_logged_in_user_email(self) -> str:
@@ -607,30 +624,35 @@ class HomePage(BasePage):
         return wait_for_image_loaded(banner_image, timeout=4000)
 
     def _get_hero_banner_link(self):
-        candidates = self.page.locator("main a[href]:visible")
+        link = self.page.locator(HomePageLocators.HERO_BANNER_SECTION).locator(
+            HomePageLocators.HERO_BANNER_LINK
+        )
+        link.wait_for(state="visible", timeout=15000)
+        return link
 
-        for index in range(candidates.count()):
-            candidate = candidates.nth(index)
-            if candidate.locator("img:visible").count() == 0:
-                continue
-
-            box = candidate.bounding_box()
-            if not box or box["width"] < 600 or box["height"] < 180:
-                continue
-
-            href = candidate.get_attribute("href") or ""
-            if not href or href.startswith(("javascript:", "mailto:", "tel:")):
-                continue
-
-            candidate.wait_for(state="visible", timeout=10000)
-            return candidate
-
-        raise AssertionError("Hero banner link not found.")
+    def select_hero_banner(self, number: int = 1):
+        section = self.page.locator(HomePageLocators.HERO_BANNER_SECTION)
+        section.get_by_role("button", name=f"Show banner {number}", exact=True).click()
+        self.page.wait_for_function(
+            "el => el.getAttribute('aria-current') === 'true'",
+            arg=section.get_by_role("button", name=f"Show banner {number}", exact=True).element_handle(),
+        )
 
     def _get_hero_banner_image(self):
         banner_link = self._get_hero_banner_link()
-        banner_image = banner_link.locator("img:visible").first
+        # The carousel overlay link and pictures are siblings. Match the active
+        # link's accessible label to the image alt, not to a route-card size.
+        label = banner_link.get_attribute("aria-label")
+        assert label, "Active banner link must identify its image"
+        banner_image = self.page.locator(HomePageLocators.HERO_BANNER_SECTION).get_by_alt_text(
+            label, exact=True
+        )
         banner_image.wait_for(state="visible", timeout=10000)
+        self.page.wait_for_function(
+            "img => getComputedStyle(img.parentElement.parentElement).opacity === '1'",
+            arg=banner_image.element_handle(),
+            timeout=10000,
+        )
         return banner_image
 
     def get_hero_banner_href(self) -> str:
@@ -639,14 +661,27 @@ class HomePage(BasePage):
 
     def click_hero_banner(self):
         print("\n[banner] click hero banner")
-        target_href = self.get_hero_banner_href()
-        self.goto(urljoin(self._get_base_url() + "/", target_href.lstrip("/")))
+        self._get_hero_banner_link().click()
+
+    def _get_popular_routes_section(self):
+        heading = self.page.get_by_role(
+            "heading", level=2, name=HomePageLocators.POPULAR_ROUTES_SECTION_TITLE,
+            exact=True,
+        )
+        section = heading.locator("xpath=ancestor::section[1]")
+        section.wait_for(state="visible", timeout=15000)
+        return section
 
     def get_visible_popular_route_links(self) -> list[str]:
-        self.page.get_by_text(
-            HomePageLocators.POPULAR_ROUTES_SECTION_LINK_TEXT, exact=True
-        ).first.wait_for(state="visible", timeout=15000)
-        route_links = self.page.locator(HomePageLocators.POPULAR_ROUTE_LINKS)
+        section = self._get_popular_routes_section()
+        cta = section.locator("a:visible").filter(has_text=re.compile(
+            "^" + re.escape(HomePageLocators.POPULAR_ROUTES_SECTION_LINK_TEXT) + "$",
+            re.IGNORECASE,
+        ))
+        cta.wait_for(state="visible", timeout=15000)
+        assert self._without_requested_site_prefix(cta.get_attribute("href")) == "/fixed-price-charter"
+        route_links = section.locator(HomePageLocators.POPULAR_ROUTE_LINKS)
+        route_links.first.wait_for(state="visible", timeout=15000)
         hrefs: list[str] = []
 
         for index in range(route_links.count()):
@@ -658,11 +693,17 @@ class HomePage(BasePage):
 
     def open_first_popular_route(self) -> str:
         print("\n[popular-routes] open first route")
-        route = self.page.locator(HomePageLocators.POPULAR_ROUTE_LINKS).first
+        route = self._get_popular_routes_section().locator(
+            HomePageLocators.POPULAR_ROUTE_LINKS
+        ).first
         route.wait_for(state="visible", timeout=15000)
         href = route.get_attribute("href") or ""
         route.click()
-        self.page.wait_for_url("**/fixed-price-charter/**", timeout=15000)
+        self.page.wait_for_url(urljoin(self.page.url, href), timeout=15000)
+        self.page.get_by_text(
+            HomePageLocators.POPULAR_ROUTE_DETAIL_TEXT, exact=True
+        ).wait_for(state="visible", timeout=15000)
+        self.assert_not_on_error_page("After clicking popular route")
         return href
 
     def is_on_popular_route_detail_page(self) -> bool:
@@ -672,21 +713,22 @@ class HomePage(BasePage):
         )
 
     def _scroll_to_specialty_flights(self):
-        title = self.page.get_by_text(HomePageLocators.SPECIALTY_FLIGHTS_TITLE, exact=True).first
+        title = self.page.get_by_role('heading', level=2, name=re.compile(
+            r"^(?:Fly to the World's Most Exclusive Destinations|Island, ski and golf getaways by private jet)$", re.I))
         title.wait_for(state="visible", timeout=15000)
         title.scroll_into_view_if_needed()
         wait_for_render_frames(self.page)
 
     def has_specialty_flights_section(self) -> bool:
         self._scroll_to_specialty_flights()
-        body_text = self.page.locator("body").inner_text()
-        return all(text in body_text for text in HomePageLocators.SPECIALTY_FLIGHT_TABS)
+        return all(self.page.get_by_role('main').get_by_role('button', name=re.compile('^'+re.escape(text)+'$', re.I)).count() == 1
+                   for text in HomePageLocators.SPECIALTY_FLIGHT_TABS)
 
     def click_specialty_flights_tab(self, tab_text: str):
         print(f"\n[specialty] click tab: {tab_text}")
         self._scroll_to_specialty_flights()
         tab = self.page.get_by_role("main").get_by_role(
-            "button", name=tab_text, exact=True
+            "button", name=re.compile('^'+re.escape(tab_text)+'$', re.I)
         )
         tab.wait_for(state="visible", timeout=10000)
         tab.click()
@@ -694,9 +736,9 @@ class HomePage(BasePage):
 
     def get_specialty_view_all_href(self) -> str:
         self._scroll_to_specialty_flights()
-        link = self.page.get_by_text(HomePageLocators.SPECIALTY_VIEW_ALL_TEXT, exact=True).first
+        link = self.page.get_by_role('link', name=re.compile('^'+re.escape(HomePageLocators.SPECIALTY_VIEW_ALL_TEXT)+'$', re.I)).filter(visible=True)
         link.wait_for(state="visible", timeout=10000)
-        return link.get_attribute("href") or ""
+        return self._without_requested_site_prefix(link.get_attribute("href") or "")
 
     def get_specialty_destination_links(self) -> list[str]:
         self._scroll_to_specialty_flights()
@@ -713,7 +755,7 @@ class HomePage(BasePage):
     def open_specialty_view_all(self):
         print("\n[specialty] open view all")
         self._scroll_to_specialty_flights()
-        link = self.page.get_by_text(HomePageLocators.SPECIALTY_VIEW_ALL_TEXT, exact=True).first
+        link = self.page.get_by_role('link', name=re.compile('^'+re.escape(HomePageLocators.SPECIALTY_VIEW_ALL_TEXT)+'$', re.I)).filter(visible=True)
         link.wait_for(state="visible", timeout=10000)
         target_href = link.get_attribute("href")
         link.click()
@@ -847,13 +889,14 @@ class HomePage(BasePage):
             self._goto_path(HomePageLocators.TRAVEL_CREDIT_PATH)
 
     def _get_empty_leg_section(self):
-        for title_text in HomePageLocators.EMPTY_LEG_SECTION_TITLES:
-            title = self.page.locator(f"h2:text-is('{title_text}')").first
-            if title.count() > 0:
-                return title.locator("xpath=ancestor::div[contains(@class, 'sm:mt-16')][1]")
-        return self.page.locator(
-            "h2:text-is('Empty Leg Near You')"
-        ).first.locator("xpath=ancestor::div[contains(@class, 'sm:mt-16')][1]")
+        title_pattern = re.compile(
+            "^(?:" + "|".join(map(re.escape, HomePageLocators.EMPTY_LEG_SECTION_TITLES)) + r"|Empty leg flights (?:across|in) .+)$",
+            re.IGNORECASE,
+        )
+        title = self.page.get_by_role("heading", level=2, name=title_pattern)
+        # The nearest ancestor containing the subscription email field encloses
+        # both the route cards and CTA, without depending on spacing classes.
+        return title.locator("xpath=ancestor::*[.//input[@type='email']][1]")
 
     def has_empty_leg_section(self) -> bool:
         section = self._get_empty_leg_section()
@@ -867,8 +910,6 @@ class HomePage(BasePage):
         section = self._get_empty_leg_section()
         section.wait_for(state="visible", timeout=15000)
         cards = section.locator(HomePageLocators.EMPTY_LEG_ROUTE_CARDS)
-        if cards.count() == 0:
-            raise AssertionError("Empty Leg route cards were not found on the home page.")
         cards.first.wait_for(state="visible", timeout=15000)
 
     def get_empty_leg_cards(self) -> list[dict]:
@@ -921,6 +962,7 @@ class HomePage(BasePage):
 
     def get_broken_empty_leg_images(self) -> list[dict]:
         broken_images = []
+        self.wait_for_empty_leg_cards()
         section = self._get_empty_leg_section()
         section.scroll_into_view_if_needed()
         wait_for_render_frames(self.page)
@@ -973,9 +1015,8 @@ class HomePage(BasePage):
         section.get_by_role("button", name=HomePageLocators.EMPTY_LEG_BOOK_BUTTON_TEXT).first.click()
 
     def _get_empty_leg_dialog(self):
-        return self.page.locator(HomePageLocators.EMPTY_LEG_DIALOG).filter(
-            has_text=HomePageLocators.EMPTY_LEG_DIALOG_TITLE
-        ).first
+        return self.page.get_by_role('dialog').filter(has=self.page.locator('form')).filter(
+            has=self.page.get_by_role('button', name=HomePageLocators.EMPTY_LEG_BOOK_BUTTON_TEXT, exact=True))
 
     def _get_empty_leg_form(self):
         return self._get_empty_leg_dialog().locator(HomePageLocators.EMPTY_LEG_FORM)
@@ -990,11 +1031,9 @@ class HomePage(BasePage):
         ).first
         trigger.click(force=True)
 
-        option = self.page.locator("[role='dialog'] div.cursor-pointer").filter(
-            has_text=HomePageLocators.EMPTY_LEG_COUNTRY_CODE_OPTION
-        ).first
+        option = self.page.get_by_text(HomePageLocators.EMPTY_LEG_COUNTRY_CODE_OPTION, exact=True)
         option.wait_for(state="visible", timeout=10000)
-        option.click(force=True)
+        option.click()
 
     def fill_empty_leg_booking_form(
         self,
@@ -1014,11 +1053,8 @@ class HomePage(BasePage):
         form.locator(HomePageLocators.EMPTY_LEG_PHONE).fill(phone_number)
         form.locator(HomePageLocators.EMPTY_LEG_MESSAGE).fill(message)
 
-        checkboxes = form.locator("input[type='checkbox']")
-        checkboxes.nth(HomePageLocators.EMPTY_LEG_CONTACT_METHOD_INDEX).check(force=True)
-        checkboxes.nth(HomePageLocators.EMPTY_LEG_TRAVEL_TYPE_INDEX).check(force=True)
-        checkboxes.nth(HomePageLocators.EMPTY_LEG_CONSENT_CONTACT_INDEX).check(force=True)
-        checkboxes.nth(HomePageLocators.EMPTY_LEG_CONSENT_PRIVACY_INDEX).check(force=True)
+        form.get_by_role('checkbox', name=re.compile('hereby consent', re.I)).check()
+        form.get_by_role('checkbox', name=re.compile('acknowledge', re.I)).check()
 
     def submit_empty_leg_booking_form(self):
         print("\n[empty-leg] submit booking form")
@@ -1037,7 +1073,7 @@ class HomePage(BasePage):
             return False
 
     def wait_for_thank_you_page(self):
-        self.wait_for_path(HomePageLocators.THANK_YOU_PATH)
+        self.wait_for_path(self.get_requested_site_prefix() + HomePageLocators.THANK_YOU_PATH, exact=True)
 
     def is_on_thank_you_page(self) -> bool:
-        return self.is_on_path(HomePageLocators.THANK_YOU_PATH)
+        return self.is_on_path(self.get_requested_site_prefix() + HomePageLocators.THANK_YOU_PATH)

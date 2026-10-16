@@ -71,6 +71,13 @@ def _module_from_nodeid(nodeid: str) -> str:
             return module
 
     rules = [
+        ("test_account_regression", "Login / Account"),
+        ("test_subscription_regression", "Empty Leg / Subscription"),
+        ("test_video_regression", "Video Centre"),
+        ("test_membership_regression", "Membership"),
+        ("test_sos_ui_regression", "SOS / UI and Medical Fields"),
+        ("test_search_time_regression", "Search / Date Polling"),
+        ("test_calendar_regression", "Search / Calendar"),
         ("test_sos_recommendation_api", "SOS / 推荐逻辑"),
         ("test_error_page_detection", "Error Page Guard"),
         ("test_contact_us", "Contact Us"),
@@ -128,6 +135,12 @@ def _priority_from_markers(marker_names: list[str]) -> str:
 def build_item_metadata(item) -> dict:
     """从 pytest item 推导报告和 Allure 都能复用的基础元数据。"""
     marker_names = [marker.name for marker in item.iter_markers()]
+    explicit_id = re.search(r"\[(TC-\d{3})(?:\]|-)", item.nodeid)
+    if explicit_id:
+        row = next((r for r in _load_test_case_rows() if r.get("用例ID") == explicit_id.group(1)), None)
+        if row:
+            return {"title": row["用例名称"], "module": row["模块"],
+                    "priority": row["优先级"], "markers": marker_names}
     return {
         "title": _one_line(getattr(getattr(item, "function", None), "__doc__", "") or item.name, 200),
         "module": _module_from_nodeid(item.nodeid),
@@ -199,7 +212,13 @@ def _test_case_match_score(row: dict, nodeid: str, title: str) -> int:
 def _resolve_test_case_info(nodeid: str, title: str) -> dict:
     best_row = None
     best_score = 0
+    explicit_id = re.search(r"\[(TC-\d{3})(?:\]|-)", nodeid)
     for row in _load_test_case_rows():
+        if explicit_id:
+            if row.get("用例ID") == explicit_id.group(1):
+                best_row = row
+                break
+            continue
         score = _test_case_match_score(row, nodeid, title)
         if score > best_score:
             best_score = score

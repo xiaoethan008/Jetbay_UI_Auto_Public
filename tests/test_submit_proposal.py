@@ -11,7 +11,7 @@ def test_submit_proposal(home_page, page):
     phone_number = "1234567890"
     message = "Automated charter proposal submission."
 
-    results_page = SearchResultsPage(page)
+    results_page = SearchResultsPage(page, site_prefix=home_page.get_requested_site_prefix())
     for _ in range(6):
         home_page.prepare_searchable_city_pair()
         home_page.click_search()

@@ -20,6 +20,9 @@ def get_mysql_connection(database_config: dict | None = None):
         "charset": config.get("charset", "utf8mb4"),
         "cursorclass": pymysql.cursors.DictCursor,
         "autocommit": False,
+        "connect_timeout": config.get("connect_timeout", 10),
+        "read_timeout": config.get("read_timeout", 30),
+        "write_timeout": config.get("write_timeout", 30),
     }
     if config.get("db"):
         connection_kwargs["database"] = config["db"]

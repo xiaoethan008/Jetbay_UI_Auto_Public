@@ -33,12 +33,12 @@ def _open_contact_us_dialog(page, base_url: str, path: str, viewport_size: dict)
     # 页面里可能存在桌面/移动两套同名按钮，取当前可见的第一个入口即可。
     contact_button = page.get_by_role(
         "button", name=re.compile(r"Contact Us|联系我们|聯繫我們")
-    ).first
+    ).filter(visible=True).first
     contact_button.wait_for(state="visible", timeout=30000)
     contact_button.click()
     dialog = page.locator('[role="dialog"]').filter(
-        has_text="Contact your personal consultant"
-    ).first
+        has_text=re.compile(r"Contact your personal consultant|联系您的专属顾问|聯繫您的專屬顧問")
+    ).filter(visible=True).first
     dialog.wait_for(state="visible")
     return dialog
 
@@ -55,13 +55,13 @@ def test_contact_us_modal_opens_on_key_pages(page):
 
             # 正向用例：弹窗至少要展示三类联系方式和可点击的 Contact Now 操作。
             expected_texts = [
-                "Contact your personal consultant",
-                "WhatsApp",
-                "Contact Number",
-                "Email",
-                "Contact Now",
+                ("Contact your personal consultant", "联系您的专属顾问", "聯繫您的專屬顧問"),
+                ("WhatsApp",),
+                ("Contact Number", "联系电话", "联系方式", "聯繫電話", "聯繫方式"),
+                ("Email", "邮箱", "邮件", "郵箱", "郵件", "電子郵件"),
+                ("Contact Now", "立即联系", "立即聯繫"),
             ]
-            missing_texts = [text for text in expected_texts if text not in dialog_text]
+            missing_texts = [options[0] for options in expected_texts if not any(text in dialog_text for text in options)]
             if missing_texts:
                 failures.append(
                     {

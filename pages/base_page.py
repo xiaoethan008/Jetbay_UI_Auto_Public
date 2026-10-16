@@ -1,3 +1,5 @@
+from urllib.parse import urlsplit
+
 from playwright.sync_api import Error as PlaywrightError
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
@@ -171,11 +173,16 @@ class BasePage:
                 except Exception:
                     pass
 
-    def wait_for_path(self, path: str, timeout: int = 30000):
-        """等待当前页面路径包含目标路径。"""
+    def wait_for_path(self, path: str, timeout: int = 30000, *, exact: bool = False):
+        """等待目标路径；成功页使用 exact，避免主站与子站相互匹配。"""
         try:
             self.page.wait_for_function(
-                "(expectedPath) => window.location.pathname.includes(expectedPath)",
+                (
+                    "expectedPath => (window.location.pathname.replace(/\\/+$/, '') || '/') "
+                    "=== (expectedPath.replace(/\\/+$/, '') || '/')"
+                    if exact else
+                    "expectedPath => window.location.pathname.includes(expectedPath)"
+                ),
                 arg=path,
                 timeout=timeout,
             )
@@ -188,8 +195,8 @@ class BasePage:
         self.assert_not_on_error_page(f"After arriving at path containing {path}")
 
     def is_on_path(self, path: str) -> bool:
-        """判断当前页面路径是否与预期一致。"""
-        return self.page.url.rstrip("/").endswith(path)
+        """精确比较 pathname，忽略查询参数/片段，但保留地区前缀。"""
+        return (urlsplit(self.page.url).path.rstrip("/") or "/") == (path.rstrip("/") or "/")
 
     def click(self, selector: str):
         """点击指定元素。"""

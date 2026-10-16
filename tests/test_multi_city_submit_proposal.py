@@ -12,7 +12,7 @@ def test_submit_multi_city_proposal(home_page, page):
     phone_number = "1234567890"
     message = "Automated multi-city charter proposal submission."
 
-    results_page = SearchResultsPage(page)
+    results_page = SearchResultsPage(page, site_prefix=home_page.get_requested_site_prefix())
     for _ in range(6):
         home_page.prepare_searchable_cities(
             count=4,

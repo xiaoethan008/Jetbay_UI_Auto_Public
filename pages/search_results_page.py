@@ -7,6 +7,10 @@ from pages.base_page import BasePage
 class SearchResultsPage(BasePage):
     """JETBAY 搜索结果页页面对象。"""
 
+    def __init__(self, page, site_prefix=''):
+        super().__init__(page)
+        self.site_prefix = site_prefix.rstrip('/')
+
     def wait_for_page(self):
         self.wait_for_path(SearchResultsPageLocators.PATH)
         self.page.wait_for_load_state("domcontentloaded")
@@ -23,9 +27,12 @@ class SearchResultsPage(BasePage):
             """,
             timeout=20000,
         )
+        # The heading is rendered before the search response completes. Waiting
+        # for a real quote action avoids treating loading placeholders as results.
+        self.page.get_by_role('button', name=SearchResultsPageLocators.RESULT_CARD_QUOTE_BUTTON_TEXT, exact=True).filter(visible=True).first.wait_for(state='visible', timeout=20000)
 
     def has_results(self) -> bool:
-        return SearchResultsPageLocators.RESULTS_TEXT in self.page.locator("body").inner_text()
+        return SearchResultsPageLocators.RESULTS_TEXT in self.page.locator("body").inner_text() and self.get_result_count() > 0
 
     def _get_result_cards(self):
         results_region = self.page.get_by_role("main")
@@ -54,12 +61,12 @@ class SearchResultsPage(BasePage):
                 re.compile(SearchResultsPageLocators.PRICE_TEXT_PATTERN)
             )
             price_text = price_locator.inner_text().strip() if price_locator.count() else ""
-            match = re.search(r"(\d[\d,]*)\s*USD", price_text)
+            match = re.fullmatch(r"(?:USD\s*(\d[\d,]*)|(\d[\d,]*)\s*USD)", price_text)
             if not match:
                 invalid_prices.append({"index": index, "price_text": price_text})
                 continue
 
-            price_value = int(match.group(1).replace(",", ""))
+            price_value = int((match.group(1) or match.group(2)).replace(",", ""))
             if price_value < 1000:
                 invalid_prices.append(
                     {
@@ -172,7 +179,7 @@ class SearchResultsPage(BasePage):
         ).click()
 
     def wait_for_thank_you_page(self):
-        self.wait_for_path(SearchResultsPageLocators.THANK_YOU_PATH)
+        self.wait_for_path(self.site_prefix + SearchResultsPageLocators.THANK_YOU_PATH, exact=True)
 
     def is_on_thank_you_page(self) -> bool:
-        return self.is_on_path(SearchResultsPageLocators.THANK_YOU_PATH)
+        return self.is_on_path(self.site_prefix + SearchResultsPageLocators.THANK_YOU_PATH)

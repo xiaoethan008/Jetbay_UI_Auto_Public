@@ -34,3 +34,15 @@ def test_module_from_nodeid_uses_explicit_module_mapping(nodeid, expected):
 
 def test_module_from_nodeid_derives_readable_fallback_from_test_filename():
     assert _module_from_nodeid("tests/test_new_feature.py::test_example") == "New Feature"
+
+
+def test_explicit_case_parameters_override_fuzzy_file_matching(monkeypatch):
+    import framework.quality_report as report
+    monkeypatch.setattr(report, '_TEST_CASE_ROWS', [
+        {'用例ID': 'TC-121', '用例名称': 'Session', '测试步骤': 'Reload', '自动化脚本': 'tests/test_account_regression.py'},
+        {'用例ID': 'TC-126', '用例名称': 'Logout', '测试步骤': 'Sign out and reload', '自动化脚本': 'tests/test_account_regression.py'}])
+    for suffix in ('TC-126', 'TC-126-desktop'):
+        actual = report._resolve_test_case_info('tests/test_account_regression.py::test_session[' + suffix + ']', 'Session')
+        assert actual['test_case_id'] == 'TC-126'
+        assert actual['operation_steps'] == 'Sign out and reload'
+    assert report._resolve_test_case_info('tests/test_account_regression.py::test_session[TC-999]', 'Session')['test_case_id'] == ''

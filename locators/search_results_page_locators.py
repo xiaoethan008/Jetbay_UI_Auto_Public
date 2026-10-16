@@ -7,7 +7,7 @@ class SearchResultsPageLocators:
     RESULT_CARD_QUOTE_BUTTON_TEXT = "Free Quote"
     QUOTE_SUMMARY_BUTTON_TEXT = "Quote ("
     QUOTE_DIALOG_TITLE = "Get a charter proposal"
-    PRICE_TEXT_PATTERN = r"\d[\d,]*\s*USD"
+    PRICE_TEXT_PATTERN = r"\b(?:USD\s*\d[\d,]*|\d[\d,]*\s*USD)\b"
 
     FORM = "form"
     FIRST_NAME = "input[name='firstName']"

@@ -1,3 +1,5 @@
+import re
+
 from pages.private_jet_page import PrivateJetPage
 from pages.base_page import BasePage
 from runtime_environments import get_current_environment
@@ -113,8 +115,11 @@ def test_private_jet_multi_city_three_legs_keeps_search_cta_visible(page):
     page.get_by_role("button", name="Multi-City").click()
     page.get_by_role("button", name="Add another flight").click()
 
-    search_button = page.locator("button:has-text('Search Available Aircraft')").last
-    search_button.wait_for(state="attached")
+    search_button = page.get_by_role(
+        "button", name=re.compile(r"^(Search Available Aircraft|Search)$", re.IGNORECASE)
+    ).filter(visible=True)
+    assert search_button.count() == 1, "Three-leg form should have one visible Search button"
+    search_button.wait_for(state="visible")
     clip_state = _get_clip_state(search_button)
 
     # 只判断 overflow 裁切后的实际可见比例，避免“DOM 存在但用户看不到”的假通过。
