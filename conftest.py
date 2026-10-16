@@ -91,6 +91,15 @@ def pytest_runtest_setup(item):
     }
     try:
         allure.dynamic.feature(metadata["module"])
+        allure.dynamic.story(metadata["submodule"])
+        allure.dynamic.parent_suite('自动化框架自检' if metadata['test_scope'] == 'framework' else '官网业务回归')
+        allure.dynamic.suite(metadata['module'])
+        allure.dynamic.sub_suite(metadata['submodule'])
+        allure.dynamic.label('test_scope', metadata['test_scope'])
+        allure.dynamic.label('test_type', metadata['test_type'])
+        allure.dynamic.label('test_method', metadata['test_method'])
+        allure.dynamic.label('environment', get_current_environment_name())
+        allure.dynamic.label('report_version', os.getenv('QA_REPORT_VERSION', 'V4.1.4'))
         allure.dynamic.title(metadata["title"])
         allure.dynamic.severity(severity_map.get(metadata["priority"], allure.severity_level.NORMAL))
     except Exception:

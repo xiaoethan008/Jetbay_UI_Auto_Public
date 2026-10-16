@@ -132,6 +132,20 @@ The report set includes:
 - `官网回归质量报告_<version>.csv`: test case execution details.
 - `quality_results.json`: raw data for follow-up automation.
 
+Report classification uses `framework/report_taxonomy.py`: business module → subfunction.
+UI/API/database coverage, version and environment are separate dimensions. Browser-prefixed
+parameters such as `[chromium-TC-143]` resolve to the same inventory case as `[TC-143]`,
+including its title and priority. Ambiguous shared-file matches remain unlinked.
+Register new test files in this taxonomy; unknown business ownership is displayed as
+`待归类业务` rather than turning the script filename into a new business module.
+
+The headline pass rate and traceability rate cover business cases. Framework self-tests
+(Trace lifecycle, report generation, network helpers, etc.) have a separate section and
+statistics; execution total = business total + framework total. Framework failures still
+fail the quality gate and pytest. Allure retains every result and groups suites by scope,
+module and subfunction. Existing JSON may be reclassified when enriching a report; its
+historical execution outcomes are preserved.
+
 The report version defaults to `V4.1.4` and can be overridden:
 
 ```sh

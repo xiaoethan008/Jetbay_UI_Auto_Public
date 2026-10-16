@@ -4,6 +4,7 @@ Backend ownership, delivery and database persistence have separate inventory gap
 """
 import json
 import re
+import time
 
 import pytest
 from playwright.sync_api import expect
@@ -88,11 +89,18 @@ def test_subscription_management_ui(page, subscriptions_ui, case_id):
         expect(page).to_have_url(re.compile(r'/manage-empty-leg-subscriptions\?emailToken=ui-contract-token$'))
         expect(page.get_by_text("Select the routes you'd like to unsubscribe from.", exact=False)).to_be_visible()
     if case_id == 'TC-212':
-        expect(page.get_by_text('Loading subscriptions...', exact=True)).to_be_visible()
+        loading = page.get_by_text('Loading subscriptions...', exact=True)
+        expect(loading).to_be_visible()
         expect(unsubscribe_button(page)).to_be_disabled()
-        assert len(state['pending']) == 1
+        # SSR can display Loading before hydration issues the GET. Pump Playwright
+        # events until the route handler actually retains that request.
+        deadline = time.monotonic() + 15
+        while not state['pending'] and time.monotonic() < deadline:
+            page.wait_for_timeout(50)
+        assert len(state['pending']) == 1, 'Expected one intercepted subscription GET within 15 seconds'
         state['pending'][0].abort('failed')
         expect(page.get_by_text('Unable to load your empty leg subscriptions. Please try again.', exact=True)).to_be_visible()
+        expect(loading).to_be_hidden()
         expect(unsubscribe_button(page)).to_be_disabled()
         assert not state['posts']
         return

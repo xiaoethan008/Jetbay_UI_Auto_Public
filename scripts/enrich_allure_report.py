@@ -2,8 +2,12 @@ import argparse
 import csv
 import html
 import json
+import sys
 from collections import Counter
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from framework.quality_report import reclassify_report_data
 
 
 START_MARKER = "<!-- JETBAY_MANAGEMENT_SUMMARY_START -->"
@@ -94,8 +98,6 @@ def _normalize_module_name(value):
     module = " ".join(str(value or "Unclassified").split())
     if not module:
         return "Unclassified"
-    if "/" in module:
-        return module.split("/", 1)[0].strip() or module
     return module
 
 
@@ -188,8 +190,9 @@ def _action_items(failed_tests, open_issues, skipped_tests):
 
 
 def build_summary_html(data, source_path: Path):
+    data = reclassify_report_data(data)
     summary = data.get("summary", {})
-    tests = data.get("tests", [])
+    tests = [case for case in data.get('tests', []) if case.get('test_scope') != 'framework']
     issues = data.get("issues", [])
     failed_tests = [case for case in tests if case.get("outcome") == "failed"]
     skipped_tests = [case for case in tests if case.get("outcome") == "skipped"]
@@ -201,7 +204,7 @@ def build_summary_html(data, source_path: Path):
 
     cards = "".join(
         [
-            _card("用例总数", summary.get("total", 0)),
+            _card("业务用例总数", summary.get("total", 0)),
             _card("通过率", f"{pass_rate}%", "ok" if not failed_tests else "risk"),
             _card("失败 / 跳过", f"{summary.get('failed', 0)} / {summary.get('skipped', 0)}", "risk" if failed_tests else ""),
             _card("未修复问题", summary.get("issue_list", {}).get("unfixed", 0), "risk" if open_issues else "ok"),
@@ -217,11 +220,14 @@ def build_summary_html(data, source_path: Path):
                 f"{gate_metrics.get('blocked', 0)} / {gate_metrics.get('transient_environment_fluctuations', 0)}",
                 "risk" if gate_metrics.get("blocked", 0) else "",
             ),
+            _card('执行总数', summary['execution']['total']),
+            _card('框架自检 总数 / 失败', f"{summary['framework']['total']} / {summary['framework']['failed']}",
+                  'risk' if summary['framework']['failed'] else ''),
         ]
     )
 
     module_rows = []
-    for module, counts in _merged_module_stats(summary.get("module_stats", {})).items():
+    for module, counts in _merged_module_stats(summary.get("submodule_stats", {})).items():
         module_rows.append(
             "<tr>"
             f"<td>{html.escape(module)}</td>"
@@ -232,12 +238,17 @@ def build_summary_html(data, source_path: Path):
             "</tr>"
         )
     module_table_html = (
-        "<h3>模块执行概览</h3>"
+        "<h3>官网业务模块 / 子功能</h3>"
         "<table>"
         "<tr><th>模块</th><th>总数</th><th>通过</th><th>失败</th><th>跳过</th></tr>"
         + ("".join(module_rows) or '<tr><td colspan="5" class="jb-muted">暂无模块数据</td></tr>')
         + "</table>"
     )
+    module_table_html += _table_html('自动化框架自检（独立统计）',
+        ['检查项', '总数', '通过', '失败', '跳过'],
+        [[name, sum(counts.values()), counts.get('passed', 0), counts.get('failed', 0), counts.get('skipped', 0)]
+         for name, counts in summary['framework']['submodule_stats'].items()], '本轮未执行框架自检')
+    module_table_html += '<p class="jb-muted">业务与框架自检分别统计；通过率及追溯率按业务用例计算。Allure 全部记录保留。</p>'
     module_table_json = json.dumps(module_table_html, ensure_ascii=False)
     overview_widget_html = (
         '<div class="jb-overview-inner">'
@@ -246,7 +257,7 @@ def build_summary_html(data, source_path: Path):
         f'<div class="jb-overview-time">{html.escape(str(summary.get("started_at", "")))} - '
         f'{html.escape(str(summary.get("finished_at", "")))}</div>'
         f'<div class="jb-overview-total"><strong>{html.escape(str(summary.get("total", 0)))}</strong>'
-        '<span>test cases</span></div>'
+        '<span>business test cases</span></div>'
         '</div>'
         f'<div class="jb-donut" style="--jb-pass-rate: {html.escape(str(pass_rate))}">'
         f'<div class="jb-donut-label"><strong>{html.escape(str(pass_rate))}%</strong></div>'
@@ -586,6 +597,7 @@ def build_summary_html(data, source_path: Path):
       <div class="jb-subtitle">
         版本 {html.escape(str(summary.get("report_version", "")))} ｜ {html.escape(str(summary.get("started_at", "")))} - {html.escape(str(summary.get("finished_at", "")))}
         ｜ Base URL: {html.escape(str(summary.get("base_url", "")))}
+        <div>{html.escape(str(summary.get('rebuild_note', '')))}</div>
       </div>
     </div>
     <div class="jb-status {status_css}">{html.escape(status_text)}</div>

@@ -1,4 +1,6 @@
 import re
+from decimal import Decimal, InvalidOperation
+from urllib.parse import urlsplit
 
 from locators.search_results_page_locators import SearchResultsPageLocators
 from pages.base_page import BasePage
@@ -10,6 +12,24 @@ class SearchResultsPage(BasePage):
     def __init__(self, page, site_prefix=''):
         super().__init__(page)
         self.site_prefix = site_prefix.rstrip('/')
+        self._search_price_rows = None
+        page.on('response', self._remember_search_prices)
+
+    def _remember_search_prices(self, response):
+        if not urlsplit(response.url).path.endswith('/web/search/searchList'):
+            return
+        self._search_price_rows = None
+        if not response.ok:
+            return
+        value = response.json()
+        if value.get('code') != 1000 or value.get('success') is not True:
+            return
+        rows = (value.get('data') or {}).get('result')
+        if isinstance(rows, list):
+            self._search_price_rows = [
+                {'aircraftModelName': row.get('aircraftModelName'), 'usdPrice': row.get('usdPrice')}
+                for row in rows
+            ]
 
     def wait_for_page(self):
         self.wait_for_path(SearchResultsPageLocators.PATH)
@@ -54,13 +74,39 @@ class SearchResultsPage(BasePage):
     def get_invalid_prices(self) -> list[dict]:
         invalid_prices = []
         cards = self._get_result_cards()
+        rows = self._search_price_rows
+        if rows is None:
+            return [{'reason': 'Search price response was not captured before checking cards'}]
+        if cards.count() != len(rows):
+            return [{'reason': 'Search response/card count differs', 'cards': cards.count(), 'records': len(rows)}]
 
         for index in range(cards.count()):
             card = cards.nth(index)
+            row = rows[index]
+            model = row.get('aircraftModelName')
+            if not model or card.get_by_text(model, exact=True).count() == 0:
+                invalid_prices.append({'index': index, 'reason': 'Card does not match the search response aircraft'})
+                continue
+            try:
+                api_price = Decimal(str(row.get('usdPrice')))
+            except InvalidOperation:
+                api_price = Decimal('NaN')
+            if not api_price.is_finite() or api_price < 0:
+                invalid_prices.append({'index': index, 'reason': 'Search response has an invalid USD price'})
+                continue
             price_locator = card.get_by_text(
                 re.compile(SearchResultsPageLocators.PRICE_TEXT_PATTERN)
-            )
+            ).filter(visible=True)
             price_text = price_locator.inner_text().strip() if price_locator.count() else ""
+            enquiry = card.get_by_text(SearchResultsPageLocators.ENQUIRE_PRICE_TEXT, exact=True).filter(visible=True)
+            if api_price == 0:
+                if not enquiry.count() or price_text:
+                    invalid_prices.append({'index': index, 'price_text': price_text,
+                                           'reason': 'Zero API price must display Enquire for Price without a numeric price'})
+                continue
+            if enquiry.count():
+                invalid_prices.append({'index': index, 'reason': 'Positive API price must display a numeric price'})
+                continue
             match = re.fullmatch(r"(?:USD\s*(\d[\d,]*)|(\d[\d,]*)\s*USD)", price_text)
             if not match:
                 invalid_prices.append({"index": index, "price_text": price_text})

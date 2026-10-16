@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from framework.quality_gate import build_quality_gate
+from framework.report_taxonomy import classify_test, extract_test_case_id
 
 
 DEFAULT_REPORT_VERSION = "V4.1.4"
@@ -135,18 +136,19 @@ def _priority_from_markers(marker_names: list[str]) -> str:
 def build_item_metadata(item) -> dict:
     """从 pytest item 推导报告和 Allure 都能复用的基础元数据。"""
     marker_names = [marker.name for marker in item.iter_markers()]
-    explicit_id = re.search(r"\[(TC-\d{3})(?:\]|-)", item.nodeid)
-    if explicit_id:
-        row = next((r for r in _load_test_case_rows() if r.get("用例ID") == explicit_id.group(1)), None)
-        if row:
-            return {"title": row["用例名称"], "module": row["模块"],
-                    "priority": row["优先级"], "markers": marker_names}
-    return {
-        "title": _one_line(getattr(getattr(item, "function", None), "__doc__", "") or item.name, 200),
-        "module": _module_from_nodeid(item.nodeid),
-        "priority": _priority_from_markers(marker_names),
-        "markers": marker_names,
-    }
+    title = _one_line(getattr(getattr(item, 'function', None), '__doc__', '') or item.name, 200)
+    return metadata_for_nodeid(item.nodeid, title, marker_names)
+
+
+def metadata_for_nodeid(nodeid, title='', marker_names=()):
+    case = _resolve_test_case_info(nodeid, title)
+    row = next((r for r in _load_test_case_rows() if case['test_case_id'] and r.get('用例ID') == case['test_case_id']), None)
+    source = row.get('模块', '') if row else _module_from_nodeid(nodeid)
+    return {'title': row['用例名称'] if row else title,
+            'priority': row.get('优先级', 'P2') if row else _priority_from_markers(marker_names),
+            'test_type': row.get('类型', '') if row else '未标注',
+            'test_method': row.get('测试方式', '') if row else 'pytest',
+            'markers': list(marker_names), **classify_test(nodeid, source)}
 
 
 _TEST_CASE_ROWS: list[dict] | None = None
@@ -210,12 +212,14 @@ def _test_case_match_score(row: dict, nodeid: str, title: str) -> int:
 
 
 def _resolve_test_case_info(nodeid: str, title: str) -> dict:
+    if classify_test(nodeid)['test_scope'] == 'framework':
+        return {'test_case_id': '', 'associated_test_case': title, 'operation_steps': '执行框架自检断言；不对应官网业务用例。'}
     best_row = None
     best_score = 0
-    explicit_id = re.search(r"\[(TC-\d{3})(?:\]|-)", nodeid)
+    explicit_id = extract_test_case_id(nodeid)
     for row in _load_test_case_rows():
         if explicit_id:
-            if row.get("用例ID") == explicit_id.group(1):
+            if row.get("用例ID") == explicit_id:
                 best_row = row
                 break
             continue
@@ -223,6 +227,15 @@ def _resolve_test_case_info(nodeid: str, title: str) -> dict:
         if score > best_score:
             best_score = score
             best_row = row
+
+    # A shared file alone cannot distinguish its business cases. Do not assign
+    # the first row's title/priority to every unparameterized test in that file.
+    if best_row and not explicit_id and best_score == 20:
+        file_path = nodeid.split('::', 1)[0].replace('\\', '/')
+        candidates = [r for r in _load_test_case_rows()
+                      if file_path in _safe_text(r.get('自动化脚本', '')).replace('\\', '/')]
+        if len(candidates) != 1:
+            best_row = None
 
     if not best_row:
         return {
@@ -377,6 +390,49 @@ def _count_issue_status(issue_rows: list[dict]) -> dict:
     }
 
 
+def report_statistics(rows):
+    def count(selected):
+        outcomes = Counter(row['outcome'] for row in selected)
+        modules, children = defaultdict(Counter), defaultdict(Counter)
+        for row in selected:
+            modules[row['module']][row['outcome']] += 1
+            children[row.get('module_path', row['module'])][row['outcome']] += 1
+        return {'total': len(selected), 'passed': outcomes['passed'], 'failed': outcomes['failed'],
+                'skipped': outcomes['skipped'],
+                'pass_rate': round(outcomes['passed'] / len(selected) * 100, 2) if selected else 0,
+                'module_stats': {k: dict(v) for k, v in sorted(modules.items())},
+                'submodule_stats': {k: dict(v) for k, v in sorted(children.items())}}
+    return {'execution': count(rows),
+            'business': count([r for r in rows if r.get('test_scope') != 'framework']),
+            'framework': count([r for r in rows if r.get('test_scope') == 'framework'])}
+
+
+def reclassify_report_data(data):
+    """Rebuild metadata/statistics without changing historical execution outcomes."""
+    rows = []
+    for original in data.get('tests', []):
+        row = dict(original)
+        nodeid = row.get('nodeid', '')
+        if nodeid:
+            markers = row.get('markers', '')
+            markers = [x.strip() for x in markers.split(',') if x.strip()] if isinstance(markers, str) else markers
+            metadata = metadata_for_nodeid(nodeid, row.get('title') or row.get('name', ''), markers)
+            row.update({k: v for k, v in metadata.items() if k != 'markers'})
+            row.update(_resolve_test_case_info(nodeid, row['title']))
+        else:
+            # Legacy synthetic rows have no node ID. Keep their explicit metadata.
+            row.setdefault('module', '待归类业务')
+            row.setdefault('submodule', '')
+            row.setdefault('module_path', row['module'])
+            row.setdefault('test_scope', 'business')
+        rows.append(row)
+    scopes = report_statistics(rows)
+    summary = {**data.get('summary', {}), **scopes['business'],
+               'execution': scopes['execution'], 'framework': scopes['framework'],
+               'quality_gate': build_quality_gate(rows, data.get('issues', []))}
+    return {**data, 'tests': rows, 'summary': summary}
+
+
 class QualityReportPlugin:
     """采集 pytest 结果，并输出面向测试/产品/研发的质量报告。"""
 
@@ -432,6 +488,11 @@ class QualityReportPlugin:
             "title": title,
             **test_case_info,
             "module": metadata["module"],
+            "submodule": metadata["submodule"],
+            "module_path": metadata["module_path"],
+            "test_scope": metadata["test_scope"],
+            "test_type": metadata['test_type'],
+            "test_method": metadata['test_method'],
             "priority": metadata["priority"],
             "outcome": report.outcome,
             "category": _failure_category(report.outcome, longrepr),
@@ -480,14 +541,7 @@ class QualityReportPlugin:
         return summary
 
     def _build_summary(self, test_rows: list[dict], issue_rows: list[dict], exitstatus: int, issue_path):
-        outcome_counts = Counter(row["outcome"] for row in test_rows)
-        module_stats = defaultdict(lambda: Counter())
-        for row in test_rows:
-            module_stats[row["module"]][row["outcome"]] += 1
-
-        total = len(test_rows)
-        passed = outcome_counts.get("passed", 0)
-        pass_rate = round(passed / total * 100, 2) if total else 0
+        scopes = report_statistics(test_rows)
         issue_status = _count_issue_status(issue_rows)
         quality_gate = build_quality_gate(test_rows, issue_rows)
 
@@ -499,14 +553,9 @@ class QualityReportPlugin:
             "exitstatus": exitstatus,
             "environment": self.environment_name,
             "base_url": self.environment_config.get("base_url", ""),
-            "total": total,
-            "passed": passed,
-            "failed": outcome_counts.get("failed", 0),
-            "skipped": outcome_counts.get("skipped", 0),
-            "pass_rate": pass_rate,
-            "module_stats": {
-                module: dict(counts) for module, counts in sorted(module_stats.items())
-            },
+            **scopes['business'],
+            "execution": scopes['execution'],
+            "framework": scopes['framework'],
             "issue_list": {
                 "path": str(issue_path) if issue_path else "",
                 **issue_status,
@@ -516,7 +565,11 @@ class QualityReportPlugin:
 
     def _write_case_csv(self, path: Path, rows: list[dict]):
         columns = [
+            "test_scope",
             "module",
+            "submodule",
+            "test_type",
+            "test_method",
             "priority",
             "outcome",
             "category",
@@ -545,8 +598,9 @@ class QualityReportPlugin:
         xlsx_path: Path,
         json_path: Path,
     ):
-        failed_rows = [row for row in test_rows if row["outcome"] == "failed"]
-        skipped_rows = [row for row in test_rows if row["outcome"] == "skipped"]
+        business_rows = [r for r in test_rows if r.get('test_scope') != 'framework']
+        failed_rows = [row for row in business_rows if row["outcome"] == "failed"]
+        skipped_rows = [row for row in business_rows if row["outcome"] == "skipped"]
 
         def link(target: str | Path, label: str):
             rel = _relative_link(target, path.parent)
@@ -577,7 +631,7 @@ class QualityReportPlugin:
     .skip {{ color: #9a6a00; }}
     table {{ width: 100%; border-collapse: collapse; background: white; margin: 10px 0 24px; }}
     th {{ background: #fff25b; color: #172026; text-align: left; }}
-    th, td {{ border: 1px solid #d9e2e0; padding: 8px; vertical-align: top; font-size: 13px; }}
+    th, td {{ border: 1px solid #d9e2e0; padding: 8px; vertical-align: top; font-size: 13px; overflow-wrap: anywhere; }}
     tr.failed td:first-child, .badge-failed {{ color: #c0392b; font-weight: 700; }}
     .badge-passed {{ color: #168b75; font-weight: 700; }}
     .badge-skipped {{ color: #9a6a00; font-weight: 700; }}
@@ -592,12 +646,14 @@ class QualityReportPlugin:
     环境：{html.escape(summary["environment"])} ｜ Base URL：{html.escape(summary["base_url"])}
     ｜ 开始：{html.escape(summary["started_at"])} ｜ 结束：{html.escape(summary["finished_at"])}
   </div>
+  <p class="small">{html.escape(summary.get('rebuild_note', ''))}</p>
   <div class="links">
     {link(csv_path, "CSV 明细")} {link(xlsx_path, "Excel 报告")} {link(json_path, "JSON 原始数据")}
   </div>
   {self._render_summary_overview(summary)}
   {self._render_quality_gate(summary)}
   {self._render_module_table(summary)}
+  {self._render_framework_table(summary)}
   {self._render_case_table("失败用例", failed_rows, path.parent)}
   {self._render_case_table("跳过用例", skipped_rows, path.parent)}
   {self._render_issue_table(issue_rows, path.parent)}
@@ -610,7 +666,7 @@ class QualityReportPlugin:
     def _render_summary_overview(self, summary: dict) -> str:
         issue = summary["issue_list"]
         cards = [
-            ("总用例", summary["total"], ""),
+            ("业务用例", summary["total"], ""),
             ("通过", summary["passed"], "pass"),
             ("失败", summary["failed"], "fail"),
             ("跳过", summary["skipped"], "skip"),
@@ -630,7 +686,10 @@ class QualityReportPlugin:
             '</div>'
             '</div>'
         )
-        return f'<div class="summary-grid">{cards_html}{donut_html}</div>'
+        execution = summary.get('execution', summary)
+        framework = summary.get('framework', {})
+        note = f"<p>执行总数 {execution['total']} = 业务 {summary['total']} + 框架自检 {framework.get('total', 0)}；通过率与追溯率按业务用例统计。</p>"
+        return note + f'<div class="summary-grid">{cards_html}{donut_html}</div>'
 
     def _render_quality_gate(self, summary: dict) -> str:
         gate = summary.get("quality_gate", {})
@@ -661,7 +720,7 @@ class QualityReportPlugin:
 
     def _render_module_table(self, summary: dict) -> str:
         rows = []
-        for module, counts in summary["module_stats"].items():
+        for module, counts in summary.get('submodule_stats', summary['module_stats']).items():
             total = sum(counts.values())
             rows.append(
                 "<tr>"
@@ -673,11 +732,18 @@ class QualityReportPlugin:
                 "</tr>"
             )
         return (
-            "<h2>模块统计</h2><table>"
+            "<h2>业务模块 / 子功能统计</h2><table>"
             "<tr><th>模块</th><th>总数</th><th>通过</th><th>失败</th><th>跳过</th></tr>"
             + "".join(rows)
             + "</table>"
         )
+
+    def _render_framework_table(self, summary):
+        stats = summary.get('framework', {})
+        if not stats.get('total'):
+            return '<h2>自动化框架自检</h2><p>本轮未执行框架自检。</p>'
+        table_summary = {**summary, 'module_stats': stats['module_stats'], 'submodule_stats': stats['submodule_stats']}
+        return self._render_module_table(table_summary).replace('业务模块 / 子功能统计', '自动化框架自检（独立统计）')
 
     def _render_case_table(
         self,
@@ -699,7 +765,7 @@ class QualityReportPlugin:
             trs.append(
                 f"<tr class='{html.escape(row['outcome'])}'>"
                 f"<td class='nowrap {outcome_css}'>{html.escape(row['outcome'])}</td>"
-                f"<td>{html.escape(row['module'])}</td>"
+                f"<td>{html.escape(row.get('module_path', row['module']))}</td>"
                 f"<td>{html.escape(row['priority'])}</td>"
                 f"<td>{html.escape(row['category'])}</td>"
                 f"<td>{html.escape(row.get('associated_test_case', ''))}</td>"
@@ -751,7 +817,10 @@ class QualityReportPlugin:
                     ["版本", summary["report_version"]],
                     ["环境", summary["environment"]],
                     ["Base URL", summary["base_url"]],
-                    ["总用例", summary["total"]],
+                    ["执行总数", summary.get('execution', summary)['total']],
+                    ["业务用例", summary["total"]],
+                    ["框架自检用例", summary.get('framework', {}).get('total', 0)],
+                    ["框架自检失败", summary.get('framework', {}).get('failed', 0)],
                     ["通过", summary["passed"]],
                     ["失败", summary["failed"]],
                     ["跳过", summary["skipped"]],
@@ -779,11 +848,11 @@ class QualityReportPlugin:
             (
                 "用例明细",
                 [
-                    ["结果", "模块", "优先级", "分类", "关联用例", "操作步骤", "用例标题", "Node ID", "URL", "截图", "失败摘要"],
+                    ["结果", "模块 / 子功能", "优先级", "分类", "关联用例", "操作步骤", "用例标题", "Node ID", "URL", "截图", "失败摘要", "统计范围", "测试类型", "验证方式"],
                     *[
                         [
                             row["outcome"],
-                            row["module"],
+                            row.get('module_path', row['module']),
                             row["priority"],
                             row["category"],
                             row.get("associated_test_case", ""),
@@ -793,6 +862,9 @@ class QualityReportPlugin:
                             row.get("current_url", ""),
                             row.get("screenshot", ""),
                             row.get("failure_excerpt", ""),
+                            row.get('test_scope', 'business'),
+                            row.get('test_type', ''),
+                            row.get('test_method', ''),
                         ]
                         for row in test_rows
                     ],

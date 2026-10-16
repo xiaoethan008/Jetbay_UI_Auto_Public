@@ -14,6 +14,9 @@ def _float_env(name: str, default: float) -> float:
 
 
 def build_quality_gate(test_rows: list[dict], issue_rows: list[dict]) -> dict:
+    framework_rows = [row for row in test_rows if row.get('test_scope') == 'framework']
+    test_rows = [row for row in test_rows if row.get('test_scope') != 'framework']
+    framework_failed = sum(row.get('outcome') == 'failed' for row in framework_rows)
     total = len(test_rows)
     passed = sum(row.get("outcome") == "passed" for row in test_rows)
     failed = sum(row.get("outcome") == "failed" for row in test_rows)
@@ -47,6 +50,8 @@ def build_quality_gate(test_rows: list[dict], issue_rows: list[dict]) -> dict:
         "maximum_blocked": int(_float_env("QA_GATE_MAX_BLOCKED", 0)),
     }
     checks = [
+        {'name': '业务用例已执行', 'passed': total > 0, 'actual': total, 'threshold': '>0'},
+        {'name': '框架自检失败', 'passed': framework_failed == 0, 'actual': framework_failed, 'threshold': '<=0'},
         {
             "name": "自动化通过率",
             "passed": pass_rate >= thresholds["minimum_pass_rate"],
@@ -84,6 +89,8 @@ def build_quality_gate(test_rows: list[dict], issue_rows: list[dict]) -> dict:
         "enforced": os.getenv("QA_GATE_ENFORCE", "false").lower() in {"1", "true", "yes"},
         "metrics": {
             "total": total,
+            "framework_total": len(framework_rows),
+            "framework_failed": framework_failed,
             "passed": passed,
             "failed": failed,
             "skipped": skipped,
